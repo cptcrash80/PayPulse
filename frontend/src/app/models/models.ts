@@ -68,6 +68,7 @@ export interface Debt {
     paidOff: boolean;
     snowballRemaining: number;
   } | null;
+  auto_pay: number;
 }
 
 export interface PeriodBreakdown {
