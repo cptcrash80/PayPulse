@@ -16,11 +16,11 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   const db = getDb();
-  const { name, amount, category_id, due_day, frequency } = req.body;
+  const { name, amount, category_id, due_day, frequency, auto_pay } = req.body;
   const id = uuidv4();
   db.prepare(
-    'INSERT INTO recurring_bills (id, name, amount, category_id, due_day, frequency) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(id, name, amount, category_id || null, due_day, frequency || 'monthly');
+    'INSERT INTO recurring_bills (id, name, amount, category_id, due_day, frequency, auto_pay) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, name, amount, category_id || null, due_day, frequency || 'monthly', auto_pay ? 1 : 0);
   const bill = db.prepare(`
     SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color
     FROM recurring_bills b
@@ -32,10 +32,10 @@ router.post('/', (req, res) => {
 
 router.put('/:id', (req, res) => {
   const db = getDb();
-  const { name, amount, category_id, due_day, frequency, is_active } = req.body;
+  const { name, amount, category_id, due_day, frequency, is_active, auto_pay } = req.body;
   db.prepare(
-    'UPDATE recurring_bills SET name=?, amount=?, category_id=?, due_day=?, frequency=?, is_active=? WHERE id=?'
-  ).run(name, amount, category_id || null, due_day, frequency, is_active ? 1 : 0, req.params.id);
+    'UPDATE recurring_bills SET name=?, amount=?, category_id=?, due_day=?, frequency=?, is_active=?, auto_pay=? WHERE id=?'
+  ).run(name, amount, category_id || null, due_day, frequency, is_active ? 1 : 0, auto_pay ? 1 : 0, req.params.id);
   const bill = db.prepare(`
     SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color
     FROM recurring_bills b

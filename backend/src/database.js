@@ -48,6 +48,7 @@ function initTables() {
       due_day INTEGER NOT NULL,
       frequency TEXT DEFAULT 'monthly',
       is_active INTEGER DEFAULT 1,
+      auto_pay INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
     );
@@ -73,6 +74,7 @@ function initTables() {
       due_day INTEGER,
       priority INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1,
+      auto_pay INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -111,13 +113,17 @@ function runMigrations() {
       name: 'add_minimum_spending_to_paycheck_config',
       check: () => !tableHasColumn(d, 'paycheck_config', 'minimum_spending'),
       run: () => d.exec("ALTER TABLE paycheck_config ADD COLUMN minimum_spending REAL NOT NULL DEFAULT 0")
+    },
+    {
+      name: 'add_auto_pay_to_recurring_bills',
+      check: () => !tableHasColumn(d, 'recurring_bills', 'auto_pay'),
+      run: () => d.exec("ALTER TABLE recurring_bills ADD COLUMN auto_pay INTEGER DEFAULT 0")
+    },
+    {
+      name: 'add_auto_pay_to_debts',
+      check: () => !tableHasColumn(d, 'debts', 'auto_pay'),
+      run: () => d.exec("ALTER TABLE debts ADD COLUMN auto_pay INTEGER DEFAULT 0")
     }
-    // Future migrations go here:
-    // {
-    //   name: 'add_some_column_to_some_table',
-    //   check: () => !tableHasColumn(d, 'some_table', 'some_column'),
-    //   run: () => d.exec("ALTER TABLE some_table ADD COLUMN some_column TEXT DEFAULT ''")
-    // }
   ];
 
   for (const m of migrations) {

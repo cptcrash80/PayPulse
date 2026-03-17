@@ -28,6 +28,7 @@ export interface RecurringBill {
   due_day: number;
   frequency: string;
   is_active: number;
+  auto_pay: number;
 }
 
 export interface Expense {

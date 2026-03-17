@@ -54,12 +54,13 @@ function generateObligations(bills, debts, periods) {
       for (let pi = 0; pi < periods.length; pi++)
         items.push({ name: bill.name + ' (x2)', amount: bill.amount * 2, type: 'bill', frequency: 'weekly', dueDate: periods[pi].payDate, deadlinePeriodIdx: pi, earliestPeriodIdx: pi, moveable: false, data: bill });
     } else if (bill.frequency === 'monthly') {
+      const isAutoPay = bill.auto_pay ? true : false;
       for (let pi = 0; pi < periods.length; pi++) {
         const pStart = new Date(periods[pi].periodStart), pEnd = new Date(periods[pi].periodEnd);
         for (const { year, month } of getMonthsInRange(pStart, pEnd)) {
           const dueDate = new Date(year, month, bill.due_day);
           if (dueDate >= pStart && dueDate < pEnd)
-            items.push({ name: bill.name, amount: bill.amount, type: 'bill', frequency: 'monthly', dueDate: dueDate.toISOString().split('T')[0], deadlinePeriodIdx: pi, earliestPeriodIdx: Math.max(0, pi - 1), moveable: true, data: bill });
+            items.push({ name: bill.name, amount: bill.amount, type: 'bill', frequency: 'monthly', dueDate: dueDate.toISOString().split('T')[0], deadlinePeriodIdx: pi, earliestPeriodIdx: isAutoPay ? pi : Math.max(0, pi - 1), moveable: !isAutoPay, autoPay: isAutoPay, data: bill });
         }
       }
     }
@@ -67,12 +68,13 @@ function generateObligations(bills, debts, periods) {
   for (const debt of debts) {
     if (debt.minimum_payment <= 0) continue;
     if (debt.due_day) {
+      const isAutoPay = debt.auto_pay ? true : false;
       for (let pi = 0; pi < periods.length; pi++) {
         const pStart = new Date(periods[pi].periodStart), pEnd = new Date(periods[pi].periodEnd);
         for (const { year, month } of getMonthsInRange(pStart, pEnd)) {
           const dueDate = new Date(year, month, debt.due_day);
           if (dueDate >= pStart && dueDate < pEnd)
-            items.push({ name: debt.name, amount: debt.minimum_payment, type: 'debt', frequency: 'monthly', dueDate: dueDate.toISOString().split('T')[0], deadlinePeriodIdx: pi, earliestPeriodIdx: Math.max(0, pi - 1), moveable: true, debtId: debt.id, remaining: debt.remaining_amount, interestRate: debt.interest_rate, data: debt });
+            items.push({ name: debt.name, amount: debt.minimum_payment, type: 'debt', frequency: 'monthly', dueDate: dueDate.toISOString().split('T')[0], deadlinePeriodIdx: pi, earliestPeriodIdx: isAutoPay ? pi : Math.max(0, pi - 1), moveable: !isAutoPay, autoPay: isAutoPay, debtId: debt.id, remaining: debt.remaining_amount, interestRate: debt.interest_rate, data: debt });
         }
       }
     } else {
@@ -113,7 +115,7 @@ function balanceAllocations(items, periods, config) {
   for (const p of periods) { p.bills = []; p.debts = []; p.totalBills = 0; p.totalDebtMins = 0; }
   for (const a of assignments) {
     const p = periods[a.assignedPeriodIdx];
-    const entry = { name: a.name, amount: a.amount, dueDate: a.dueDate, frequency: a.frequency, paidEarly: a.assignedPeriodIdx < a.deadlinePeriodIdx };
+    const entry = { name: a.name, amount: a.amount, dueDate: a.dueDate, frequency: a.frequency, paidEarly: a.assignedPeriodIdx < a.deadlinePeriodIdx, autoPay: a.autoPay || false };
     if (a.type === 'bill') { p.bills.push(entry); p.totalBills += a.amount; }
     else { p.debts.push({ ...entry, remaining: a.remaining, interestRate: a.interestRate, debtId: a.debtId }); p.totalDebtMins += a.amount; }
   }
