@@ -38,7 +38,10 @@ import { RecurringBill, Category } from '../../models/models';
         </thead>
         <tbody>
           <tr *ngFor="let bill of bills">
-            <td style="font-weight: 500;">{{ bill.name }}</td>
+            <td style="font-weight: 500;">
+              {{ bill.name }}
+              <span *ngIf="bill.auto_pay" class="tag" style="background: var(--info-dim); color: var(--info); margin-left: 6px; font-size: 0.7rem;">Auto-pay</span>
+            </td>
             <td>
               <span class="tag" [style.background]="(bill.category_color || '#64748b') + '20'" [style.color]="bill.category_color || '#64748b'">
                 {{ bill.category_icon || '📁' }} {{ bill.category_name || 'None' }}
@@ -100,6 +103,16 @@ import { RecurringBill, Category } from '../../models/models';
           </div>
         </div>
 
+        <div class="form-group" style="margin-top: 4px;">
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; letter-spacing: normal; font-size: 0.9rem;">
+            <input type="checkbox" [(ngModel)]="form.auto_pay" style="width: auto; cursor: pointer;">
+            Auto-pay enabled
+          </label>
+          <small style="color: var(--text-muted); font-size: 0.78rem; margin-top: 4px; display: block;">
+            Auto-pay bills are locked to their due date and cannot be paid early by the balancer
+          </small>
+        </div>
+
         <div class="modal-actions">
           <button class="btn-secondary" (click)="closeModal()">Cancel</button>
           <button class="btn-primary" (click)="saveBill()">{{ editing ? 'Update' : 'Add' }} Bill</button>
@@ -113,7 +126,7 @@ export class BillsComponent implements OnInit {
   categories: Category[] = [];
   showModal = false;
   editing: RecurringBill | null = null;
-  form: any = { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly' };
+  form: any = { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', auto_pay: false };
 
   get totalMonthly(): number {
     return this.bills.reduce((sum, b) => {
@@ -137,7 +150,7 @@ export class BillsComponent implements OnInit {
 
   openModal(bill?: RecurringBill) {
     this.editing = bill || null;
-    this.form = bill ? { ...bill } : { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly' };
+    this.form = bill ? { ...bill, auto_pay: !!bill.auto_pay } : { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', auto_pay: false };
     this.showModal = true;
   }
 

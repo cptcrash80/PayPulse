@@ -38,21 +38,21 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   const db = getDb();
-  const { name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority } = req.body;
+  const { name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, auto_pay } = req.body;
   const id = uuidv4();
   db.prepare(
-    'INSERT INTO debts (id, name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, name, total_amount, remaining_amount ?? total_amount, minimum_payment || 0, interest_rate || 0, due_day || null, priority || 0);
+    'INSERT INTO debts (id, name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, auto_pay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, name, total_amount, remaining_amount ?? total_amount, minimum_payment || 0, interest_rate || 0, due_day || null, priority || 0, auto_pay ? 1 : 0);
   const debt = db.prepare('SELECT * FROM debts WHERE id = ?').get(id);
   res.json({ ...debt, payments: [], snowballEstimate: null });
 });
 
 router.put('/:id', (req, res) => {
   const db = getDb();
-  const { name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, is_active } = req.body;
+  const { name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, is_active, auto_pay } = req.body;
   db.prepare(
-    'UPDATE debts SET name=?, total_amount=?, remaining_amount=?, minimum_payment=?, interest_rate=?, due_day=?, priority=?, is_active=?, updated_at=datetime("now") WHERE id=?'
-  ).run(name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day || null, priority || 0, is_active ? 1 : 0, req.params.id);
+    'UPDATE debts SET name=?, total_amount=?, remaining_amount=?, minimum_payment=?, interest_rate=?, due_day=?, priority=?, is_active=?, auto_pay=?, updated_at=datetime("now") WHERE id=?'
+  ).run(name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day || null, priority || 0, is_active ? 1 : 0, auto_pay ? 1 : 0, req.params.id);
   const debt = db.prepare('SELECT * FROM debts WHERE id = ?').get(req.params.id);
   const payments = db.prepare('SELECT * FROM debt_payments WHERE debt_id = ? ORDER BY date DESC').all(req.params.id);
   res.json({ ...debt, payments, snowballEstimate: null });

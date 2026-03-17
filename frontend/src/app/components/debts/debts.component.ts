@@ -44,7 +44,7 @@ import { Debt } from '../../models/models';
       <div *ngFor="let debt of debts" class="debt-card">
         <div class="debt-header">
           <div>
-            <h4>{{ debt.name }}</h4>
+            <h4>{{ debt.name }} <span *ngIf="debt.auto_pay" class="tag" style="background: var(--info-dim); color: var(--info); font-size: 0.7rem; font-weight: 600;">Auto-pay</span></h4>
             <div class="debt-meta text-muted">
               {{ debt.interest_rate }}% APR
               <span *ngIf="debt.due_day"> · Due {{ getOrdinal(debt.due_day) }}</span>
@@ -137,6 +137,17 @@ import { Debt } from '../../models/models';
             <input type="number" [(ngModel)]="form.priority" min="0">
           </div>
         </div>
+
+        <div class="form-group" style="margin-top: 4px;">
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; letter-spacing: normal; font-size: 0.9rem;">
+            <input type="checkbox" [(ngModel)]="form.auto_pay" style="width: auto; cursor: pointer;">
+            Auto-pay enabled
+          </label>
+          <small style="color: var(--text-muted); font-size: 0.78rem; margin-top: 4px; display: block;">
+            Auto-pay debts are locked to their due date and cannot be paid early by the balancer
+          </small>
+        </div>
+
         <div class="modal-actions">
           <button class="btn-secondary" (click)="closeModals()">Cancel</button>
           <button class="btn-primary" (click)="saveDebt()">{{ editing ? 'Update' : 'Add' }}</button>
@@ -241,7 +252,7 @@ export class DebtsComponent implements OnInit {
   showPaymentModal = false;
   editing: Debt | null = null;
   paymentDebt: Debt | null = null;
-  form: any = { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0 };
+  form: any = { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false };
   paymentForm: any = { amount: 0, date: new Date().toISOString().split('T')[0], notes: '' };
 
   get totalRemaining() { return this.debts.reduce((s, d) => s + d.remaining_amount, 0); }
@@ -256,7 +267,7 @@ export class DebtsComponent implements OnInit {
 
   openModal(debt?: Debt) {
     this.editing = debt || null;
-    this.form = debt ? { ...debt } : { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0 };
+    this.form = debt ? { ...debt, auto_pay: !!debt.auto_pay } : { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false };
     this.showModal = true;
   }
 

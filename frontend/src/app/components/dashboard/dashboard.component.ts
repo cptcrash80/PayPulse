@@ -128,11 +128,11 @@ import { DashboardData } from '../../models/models';
             </div>
             <div class="period-items" *ngIf="period.bills.length > 0 || period.debts.length > 0">
               <div *ngFor="let bill of period.bills" class="period-line-item" [class.early]="bill.paidEarly">
-                <span>📋 {{ bill.name }}<span *ngIf="bill.paidEarly" class="early-badge">early</span></span>
+                <span>📋 {{ bill.name }}<span *ngIf="bill.paidEarly" class="early-badge">early</span><span *ngIf="bill.autoPay" class="auto-badge">🔒</span></span>
                 <span class="money">{{ bill.amount | currency }}</span>
               </div>
               <div *ngFor="let debt of period.debts" class="period-line-item debt-item" [class.early]="debt.paidEarly">
-                <span>🏦 {{ debt.name }}<span *ngIf="debt.paidEarly" class="early-badge">early</span></span>
+                <span>🏦 {{ debt.name }}<span *ngIf="debt.paidEarly" class="early-badge">early</span><span *ngIf="debt.autoPay" class="auto-badge">🔒</span></span>
                 <span class="money">{{ debt.amount | currency }}</span>
               </div>
             </div>
@@ -322,6 +322,11 @@ import { DashboardData } from '../../models/models';
       margin-left: 6px;
       font-style: normal;
       font-weight: 600;
+      vertical-align: middle;
+    }
+    .auto-badge {
+      margin-left: 4px;
+      font-size: 0.65rem;
       vertical-align: middle;
     }
     .period-view-link {
