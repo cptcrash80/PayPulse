@@ -1,0 +1,169 @@
+import { Component, OnInit } from '@angular/core';
+import { CommonModule, CurrencyPipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ApiService } from '../../services/api.service';
+import { RecurringBill, Category } from '../../models/models';
+
+@Component({
+  selector: 'app-bills',
+  standalone: true,
+  imports: [CommonModule, FormsModule, CurrencyPipe],
+  template: `
+    <div class="page-header">
+      <h2>Recurring Bills</h2>
+      <p>Manage your recurring monthly and bi-weekly bills</p>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-header">
+        <span class="card-title">All Bills</span>
+        <button class="btn-primary btn-sm" (click)="openModal()">+ Add Bill</button>
+      </div>
+
+      <div *ngIf="bills.length === 0" class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-text">No bills yet. Add your first recurring bill.</div>
+      </div>
+
+      <table class="data-table" *ngIf="bills.length > 0">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Amount</th>
+            <th>Due Day</th>
+            <th>Frequency</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let bill of bills">
+            <td style="font-weight: 500;">{{ bill.name }}</td>
+            <td>
+              <span class="tag" [style.background]="(bill.category_color || '#64748b') + '20'" [style.color]="bill.category_color || '#64748b'">
+                {{ bill.category_icon || '📁' }} {{ bill.category_name || 'None' }}
+              </span>
+            </td>
+            <td class="money">{{ bill.amount | currency }}</td>
+            <td>{{ getOrdinal(bill.due_day) }}</td>
+            <td style="text-transform: capitalize;">{{ bill.frequency }}</td>
+            <td>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn-icon" (click)="openModal(bill)" title="Edit">✏️</button>
+                <button class="btn-icon" (click)="deleteBill(bill)" title="Delete" style="color: var(--danger);">🗑️</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div *ngIf="bills.length > 0" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; justify-content: space-between;">
+        <span class="text-muted">Total Monthly Bills</span>
+        <span class="money stat-value" style="font-size: 1.1rem;">{{ totalMonthly | currency }}</span>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-title">{{ editing ? 'Edit' : 'Add' }} Bill</div>
+
+        <div class="form-group">
+          <label>Bill Name</label>
+          <input type="text" [(ngModel)]="form.name" placeholder="e.g. Rent, Electric, Internet">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Amount</label>
+            <input type="number" [(ngModel)]="form.amount" step="0.01" min="0" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label>Due Day of Month</label>
+            <input type="number" [(ngModel)]="form.due_day" min="1" max="31" placeholder="1-31">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Category</label>
+            <select [(ngModel)]="form.category_id">
+              <option [ngValue]="null">None</option>
+              <option *ngFor="let cat of categories" [ngValue]="cat.id">{{ cat.icon }} {{ cat.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Frequency</label>
+            <select [(ngModel)]="form.frequency">
+              <option value="monthly">Monthly</option>
+              <option value="biweekly">Bi-Weekly</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" (click)="closeModal()">Cancel</button>
+          <button class="btn-primary" (click)="saveBill()">{{ editing ? 'Update' : 'Add' }} Bill</button>
+        </div>
+      </div>
+    </div>
+  `
+})
+export class BillsComponent implements OnInit {
+  bills: RecurringBill[] = [];
+  categories: Category[] = [];
+  showModal = false;
+  editing: RecurringBill | null = null;
+  form: any = { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly' };
+
+  get totalMonthly(): number {
+    return this.bills.reduce((sum, b) => {
+      if (b.frequency === 'monthly') return sum + b.amount;
+      if (b.frequency === 'biweekly') return sum + (b.amount * 26 / 12);
+      if (b.frequency === 'weekly') return sum + (b.amount * 52 / 12);
+      return sum + b.amount;
+    }, 0);
+  }
+
+  constructor(private api: ApiService) {}
+
+  ngOnInit() {
+    this.load();
+    this.api.getCategories().subscribe(c => this.categories = c);
+  }
+
+  load() {
+    this.api.getBills().subscribe(b => this.bills = b);
+  }
+
+  openModal(bill?: RecurringBill) {
+    this.editing = bill || null;
+    this.form = bill ? { ...bill } : { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly' };
+    this.showModal = true;
+  }
+
+  closeModal() {
+    this.showModal = false;
+    this.editing = null;
+  }
+
+  saveBill() {
+    if (!this.form.name || !this.form.amount) return;
+    const obs = this.editing
+      ? this.api.updateBill(this.editing.id, { ...this.form, is_active: 1 })
+      : this.api.createBill(this.form);
+    obs.subscribe(() => { this.load(); this.closeModal(); });
+  }
+
+  deleteBill(bill: RecurringBill) {
+    if (confirm(`Delete "${bill.name}"?`)) {
+      this.api.deleteBill(bill.id).subscribe(() => this.load());
+    }
+  }
+
+  getOrdinal(n: number): string {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    const idx = (v - 20) % 10;
+    return n + (s[idx > 0 ? idx : 0] || s[v] || s[0]);
+  }
+}

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  paypulse:
+    # To use the pre-built image from GitHub Container Registry:
+    # image: ghcr.io/YOUR_GITHUB_USERNAME/budget-app:latest
+    #
+    # To build locally instead:
+    build: .
+    container_name: paypulse
+    ports:
+      - "3000:3000"
+    volumes:
+      - paypulse-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+
+volumes:
+  paypulse-data:
+    driver: local
