@@ -91,4 +91,9 @@ export class ApiService {
   addDebtPayment(debtId: string, data: { amount: number; date: string; notes?: string }): Observable<Debt> {
     return this.http.post<Debt>(`${this.base}/debts/${debtId}/payments`, data);
   }
+
+  // Year Review
+  getYearReview(year: number): Observable<any> {
+    return this.http.get(`${this.base}/review?year=${year}`);
+  }
 }

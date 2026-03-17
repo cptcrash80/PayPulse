@@ -46,6 +46,11 @@ import { CommonModule } from '@angular/common';
               <span class="nav-icon">🏷️</span> Categories
             </a>
           </li>
+          <li>
+            <a routerLink="/review" routerLinkActive="active" (click)="sidebarOpen = false">
+              <span class="nav-icon">📅</span> Year Review
+            </a>
+          </li>
         </ul>
       </aside>
 

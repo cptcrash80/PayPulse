@@ -15,6 +15,7 @@ app.use('/api/bills', require('./routes/bills'));
 app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/debts', require('./routes/debts'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/review', require('./routes/review'));
 
 // Serve Angular frontend in production
 const frontendPath = path.join(__dirname, '..', 'public');
