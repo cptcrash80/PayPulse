@@ -61,6 +61,7 @@ export interface Debt {
   due_day: number | null;
   priority: number;
   is_active: number;
+  auto_pay: number;
   payments: DebtPayment[];
   snowballEstimate: {
     payoffPeriod: string | null;
@@ -68,7 +69,6 @@ export interface Debt {
     paidOff: boolean;
     snowballRemaining: number;
   } | null;
-  auto_pay: number;
 }
 
 export interface PeriodBreakdown {

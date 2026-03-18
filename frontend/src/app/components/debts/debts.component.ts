@@ -148,6 +148,10 @@ import { Debt } from '../../models/models';
           </small>
         </div>
 
+        <div *ngIf="error" style="background: var(--danger-dim); color: var(--danger); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; margin-top: 8px;">
+          {{ error }}
+        </div>
+
         <div class="modal-actions">
           <button class="btn-secondary" (click)="closeModals()">Cancel</button>
           <button class="btn-primary" (click)="saveDebt()">{{ editing ? 'Update' : 'Add' }}</button>
@@ -252,6 +256,7 @@ export class DebtsComponent implements OnInit {
   showPaymentModal = false;
   editing: Debt | null = null;
   paymentDebt: Debt | null = null;
+  error = '';
   form: any = { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false };
   paymentForm: any = { amount: 0, date: new Date().toISOString().split('T')[0], notes: '' };
 
@@ -269,6 +274,7 @@ export class DebtsComponent implements OnInit {
     this.editing = debt || null;
     this.form = debt ? { ...debt, auto_pay: !!debt.auto_pay } : { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false };
     this.showModal = true;
+    this.error = '';
   }
 
   openPayment(debt: Debt) {
@@ -284,10 +290,28 @@ export class DebtsComponent implements OnInit {
 
   saveDebt() {
     if (!this.form.name) return;
+    this.error = '';
+    const payload = {
+      name: this.form.name,
+      total_amount: this.form.total_amount || 0,
+      remaining_amount: this.form.remaining_amount ?? this.form.total_amount ?? 0,
+      minimum_payment: this.form.minimum_payment || 0,
+      interest_rate: this.form.interest_rate || 0,
+      due_day: this.form.due_day || null,
+      priority: this.form.priority || 0,
+      is_active: 1,
+      auto_pay: this.form.auto_pay ? 1 : 0
+    };
     const obs = this.editing
-      ? this.api.updateDebt(this.editing.id, { ...this.form, is_active: 1 })
-      : this.api.createDebt(this.form);
-    obs.subscribe(() => { this.load(); this.closeModals(); });
+      ? this.api.updateDebt(this.editing.id, payload)
+      : this.api.createDebt(payload);
+    obs.subscribe({
+      next: () => { this.load(); this.closeModals(); },
+      error: (err) => {
+        this.error = err.error?.error || err.message || 'Save failed';
+        console.error('Save debt error:', err);
+      }
+    });
   }
 
   deleteDebt(debt: Debt) {
