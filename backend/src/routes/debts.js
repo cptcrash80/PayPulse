@@ -71,7 +71,7 @@ router.put('/:id', (req, res) => {
     console.log('PUT /debts/:id params:', { name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, is_active, auto_pay, id: req.params.id });
 
     db.prepare(
-      'UPDATE debts SET name=?, total_amount=?, remaining_amount=?, minimum_payment=?, interest_rate=?, due_day=?, priority=?, is_active=?, auto_pay=?, updated_at=datetime("now") WHERE id=?'
+      `UPDATE debts SET name=?, total_amount=?, remaining_amount=?, minimum_payment=?, interest_rate=?, due_day=?, priority=?, is_active=?, auto_pay=?, updated_at=datetime('now') WHERE id=?`
     ).run(name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, is_active, auto_pay, req.params.id);
 
     const debt = db.prepare('SELECT * FROM debts WHERE id = ?').get(req.params.id);
@@ -103,7 +103,7 @@ router.post('/:id/payments', (req, res) => {
       'INSERT INTO debt_payments (id, debt_id, amount, date, notes) VALUES (?, ?, ?, ?, ?)'
     ).run(payId, req.params.id, amount, date, notes || null);
     db.prepare(
-      'UPDATE debts SET remaining_amount = MAX(0, remaining_amount - ?), updated_at = datetime("now") WHERE id = ?'
+      `UPDATE debts SET remaining_amount = MAX(0, remaining_amount - ?), updated_at = datetime('now') WHERE id = ?`
     ).run(amount, req.params.id);
     const debt = db.prepare('SELECT * FROM debts WHERE id = ?').get(req.params.id);
     const payments = db.prepare('SELECT * FROM debt_payments WHERE debt_id = ? ORDER BY date DESC').all(req.params.id);

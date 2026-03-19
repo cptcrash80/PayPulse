@@ -45,7 +45,7 @@ router.patch('/transfer', (req, res) => {
   try {
     const db = getDb();
     const { transfer_amount } = req.body;
-    db.prepare('UPDATE paycheck_config SET transfer_amount = ?, updated_at = datetime("now")').run(transfer_amount);
+    db.prepare(`UPDATE paycheck_config SET transfer_amount = ?, updated_at = datetime('now')`).run(transfer_amount);
     const config = db.prepare('SELECT * FROM paycheck_config ORDER BY created_at DESC LIMIT 1').get();
     res.json(config);
   } catch (err) {
