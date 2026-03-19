@@ -161,9 +161,18 @@ export class BillsComponent implements OnInit {
 
   saveBill() {
     if (!this.form.name || !this.form.amount) return;
+    const payload = {
+      name: this.form.name,
+      amount: this.form.amount,
+      category_id: this.form.category_id || null,
+      due_day: this.form.due_day,
+      frequency: this.form.frequency || 'monthly',
+      is_active: 1,
+      auto_pay: this.form.auto_pay ? 1 : 0
+    };
     const obs = this.editing
-      ? this.api.updateBill(this.editing.id, { ...this.form, is_active: 1 })
-      : this.api.createBill(this.form);
+      ? this.api.updateBill(this.editing.id, payload)
+      : this.api.createBill(payload);
     obs.subscribe(() => { this.load(); this.closeModal(); });
   }
 
