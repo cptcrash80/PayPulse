@@ -148,6 +148,8 @@ router.get('/period/:payDate', (req, res) => {
     const src = bills.find(o => o.name === b.name || (b.name.startsWith(o.name) && b.frequency === 'weekly'));
     return { ...b, category_name: src?.category_name || null, category_icon: src?.category_icon || null, category_color: src?.category_color || null };
   });
+
+  // Start with debts from the balancer
   const enrichedDebts = period.debts.map(d => {
     const src = debts.find(o => o.name === d.name);
     const se = periodSnowball?.snowballPayments.find(s => s.debtId === d.debtId);
@@ -155,10 +157,41 @@ router.get('/period/:payDate', (req, res) => {
       ...d, minimum_payment: d.amount,
       remaining_amount: d.remaining || src?.remaining_amount || 0,
       interest_rate: d.interestRate || src?.interest_rate || 0,
-      snowballExtra: se?.extra || 0, snowballTotal: se?.total || d.amount,
-      remainingAfterSnowball: se?.remainingAfter ?? (d.remaining || src?.remaining_amount || 0)
+      snowballExtra: se?.extra ?? 0, snowballTotal: se?.total ?? d.amount,
+      remainingAfterSnowball: se?.remainingAfter ?? (d.remaining || src?.remaining_amount || 0),
+      paymentUrl: d.paymentUrl || src?.payment_url || null
     };
   });
+
+  // Add any debts that have snowball payments but aren't in the balancer's allocation
+  // (e.g. snowball extra targeting a debt with no minimum due this period)
+  if (periodSnowball?.snowballPayments) {
+    for (const sp of periodSnowball.snowballPayments) {
+      const alreadyListed = enrichedDebts.find(d => d.debtId === sp.debtId || d.name === sp.debtName);
+      if (!alreadyListed && sp.total > 0) {
+        const src = debts.find(o => o.id === sp.debtId || o.name === sp.debtName);
+        enrichedDebts.push({
+          id: src?.id || sp.debtId,
+          debtId: sp.debtId,
+          name: sp.debtName,
+          amount: 0,
+          minimum_payment: 0,
+          dueDate: null,
+          frequency: 'snowball',
+          paidEarly: false,
+          autoPay: false,
+          isVariable: false,
+          remaining_amount: src?.remaining_amount || 0,
+          interest_rate: src?.interest_rate || 0,
+          snowballExtra: sp.extra,
+          snowballTotal: sp.total,
+          remainingAfterSnowball: sp.remainingAfter,
+          paymentUrl: src?.payment_url || null,
+          snowballOnly: true
+        });
+      }
+    }
+  }
 
   res.json({
     payDate: period.periodStart, periodEnd: period.periodEnd,

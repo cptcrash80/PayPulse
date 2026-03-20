@@ -50,9 +50,24 @@ router.get('/', (req, res) => {
   // Run snowball over these periods
   const snowball = computeSnowball(balanced, activeDebts, config);
 
-  // Build per-paycheck breakdown
+  // Build per-paycheck breakdown, applying amount overrides for variable bills
   const paycheckBreakdowns = balanced.map((p, i) => {
     const sa = snowball.periodAllocations[i];
+
+    // Fetch amount overrides for this period
+    const overrideRows = db.prepare('SELECT * FROM period_amount_overrides WHERE pay_date = ?').all(p.payDate);
+    const overrideMap = {};
+    for (const o of overrideRows) {
+      overrideMap[`${o.item_type}:${o.item_id}`] = o.amount;
+    }
+
+    // Apply overrides to bill items and compute actual bill total
+    const billItems = p.bills.map(b => {
+      const key = `bill:${b.id || b.name}`;
+      const actualAmount = overrideMap[key] !== undefined ? overrideMap[key] : b.amount;
+      return { ...b, estimateAmount: b.amount, actualAmount };
+    });
+    const actualBillTotal = round2(billItems.reduce((s, b) => s + b.actualAmount, 0));
 
     // Actual expenses recorded in this period
     const expData = db.prepare(
@@ -66,19 +81,21 @@ router.get('/', (req, res) => {
 
     const totalSnowball = sa ? sa.totalSnowball : p.totalDebtMins;
     const snowballExtra = sa ? sa.snowballExtra : 0;
+    const actualDebtMins = sa ? round2(sa.snowballPayments.reduce((s, sp) => s + sp.minimum, 0)) : p.totalDebtMins;
 
     return {
       payDate: p.payDate,
       income: config.amount,
-      bills: p.totalBills,
-      debtMinimums: p.totalDebtMins,
+      bills: actualBillTotal,
+      billsEstimate: p.totalBills,
+      debtMinimums: actualDebtMins,
       snowballExtra: snowballExtra,
       totalDebtPayments: totalSnowball,
       transfer: p.transfer,
       expenses: round2(expData.total),
       expenseCount: expData.count,
       actualDebtPayments: round2(debtPayData.total),
-      billItems: p.bills,
+      billItems: billItems,
       debtItems: p.debts
     };
   });
@@ -95,33 +112,29 @@ router.get('/', (req, res) => {
       .get(yearStart, yearEnd).total
   );
 
-  // Per-bill annual totals
+  // Per-bill annual totals (using actual amounts where overrides exist)
   const billTotals = {};
   for (const p of paycheckBreakdowns) {
     for (const b of p.billItems) {
-      if (!billTotals[b.name]) billTotals[b.name] = { name: b.name, total: 0, count: 0 };
-      billTotals[b.name].total = round2(billTotals[b.name].total + b.amount);
+      if (!billTotals[b.name]) billTotals[b.name] = { name: b.name, total: 0, estimate: 0, count: 0, isVariable: b.isVariable || false };
+      billTotals[b.name].total = round2(billTotals[b.name].total + b.actualAmount);
+      billTotals[b.name].estimate = round2(billTotals[b.name].estimate + b.estimateAmount);
       billTotals[b.name].count++;
     }
   }
 
-  // Per-debt annual totals (planned from snowball)
+  // Per-debt annual totals — use snowball payments which correctly account for payoff
+  // The snowball stops paying minimums after a debt is paid off, so these totals are accurate
   const debtTotals = {};
-  for (const p of paycheckBreakdowns) {
-    for (const d of p.debtItems) {
-      if (!debtTotals[d.name]) debtTotals[d.name] = { name: d.name, minimums: 0, count: 0 };
-      debtTotals[d.name].minimums = round2(debtTotals[d.name].minimums + d.amount);
-      debtTotals[d.name].count++;
-    }
-  }
-  // Add snowball extras per debt
   for (const sa of snowball.periodAllocations) {
     for (const sp of sa.snowballPayments) {
-      if (!debtTotals[sp.debtName]) debtTotals[sp.debtName] = { name: sp.debtName, minimums: 0, count: 0 };
-      debtTotals[sp.debtName].extra = round2((debtTotals[sp.debtName].extra || 0) + sp.extra);
-      debtTotals[sp.debtName].totalPlanned = round2(
-        debtTotals[sp.debtName].minimums + (debtTotals[sp.debtName].extra || 0)
-      );
+      if (!debtTotals[sp.debtName]) {
+        debtTotals[sp.debtName] = { name: sp.debtName, minimums: 0, extra: 0, totalPlanned: 0, count: 0 };
+      }
+      debtTotals[sp.debtName].minimums = round2(debtTotals[sp.debtName].minimums + sp.minimum);
+      debtTotals[sp.debtName].extra = round2(debtTotals[sp.debtName].extra + sp.extra);
+      debtTotals[sp.debtName].totalPlanned = round2(debtTotals[sp.debtName].totalPlanned + sp.total);
+      if (sp.total > 0) debtTotals[sp.debtName].count++;
     }
   }
 
