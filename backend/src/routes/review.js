@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../database');
 const { round2, calculatePayDates, buildPeriodShells, generateObligations,
-        balanceAllocations, computeSnowball } = require('../engine');
+        balanceAllocations, computeSnowball, getBillsWithSubscriptions } = require('../engine');
 
 /**
  * GET /api/review?year=2026
@@ -15,8 +15,8 @@ router.get('/', (req, res) => {
 
   const requestedYear = parseInt(req.query.year) || new Date().getFullYear();
 
-  const bills = db.prepare('SELECT * FROM recurring_bills WHERE is_active = 1').all();
-  const debts = db.prepare('SELECT * FROM debts').all(); // all debts, active or not
+  const bills = getBillsWithSubscriptions();
+  const debts = db.prepare('SELECT * FROM debts').all();
   const activeDebts = debts.filter(d => d.is_active);
 
   // Generate pay dates covering the full requested year

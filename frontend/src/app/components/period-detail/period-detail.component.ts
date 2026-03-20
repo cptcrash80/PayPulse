@@ -104,13 +104,16 @@ import { ApiService } from '../../services/api.service';
       <div class="card">
         <div class="card-header">
           <span class="card-title">📋 Bills Due</span>
-          <span class="tag" style="background: var(--warning-dim); color: var(--warning);">{{ data.bills.length }} items</span>
+          <span class="tag" style="background: var(--warning-dim); color: var(--warning);">{{ paidBillsCount }}/{{ data.bills.length }} paid</span>
         </div>
         <div *ngIf="data.bills.length === 0" class="empty-state" style="padding: 20px;">
           <div class="empty-state-text text-muted">No bills this period</div>
         </div>
-        <div *ngFor="let bill of data.bills" class="detail-row">
+        <div *ngFor="let bill of data.bills" class="detail-row" [class.is-paid]="isPaid(bill.id || bill.name, 'bill')">
           <div class="detail-left">
+            <button class="paid-check" [class.checked]="isPaid(bill.id || bill.name, 'bill')" (click)="togglePaid(bill.id || bill.name, 'bill')">
+              {{ isPaid(bill.id || bill.name, 'bill') ? '✓' : '' }}
+            </button>
             <span class="detail-icon" [style.background]="(bill.category_color || '#f59e0b') + '20'" [style.color]="bill.category_color || '#f59e0b'">{{ bill.category_icon || '📋' }}</span>
             <div>
               <div class="detail-name">{{ bill.name }} <span *ngIf="bill.paidEarly" class="early-badge">Paid Early</span></div>
@@ -120,7 +123,10 @@ import { ApiService } from '../../services/api.service';
               </div>
             </div>
           </div>
-          <span class="money text-warning">{{ bill.amount | currency }}</span>
+          <div class="detail-right">
+            <a *ngIf="bill.paymentUrl" [href]="bill.paymentUrl" target="_blank" rel="noopener" class="pay-link">Pay →</a>
+            <span class="money text-warning">{{ bill.amount | currency }}</span>
+          </div>
         </div>
         <div *ngIf="data.bills.length > 0" class="detail-total">
           <span>Total Bills</span>
@@ -132,13 +138,16 @@ import { ApiService } from '../../services/api.service';
       <div class="card">
         <div class="card-header">
           <span class="card-title">🏦 Debt Payments</span>
-          <span class="tag" style="background: var(--danger-dim); color: var(--danger);">{{ data.debts.length }} debts</span>
+          <span class="tag" style="background: var(--danger-dim); color: var(--danger);">{{ paidDebtsCount }}/{{ data.debts.length }} paid</span>
         </div>
         <div *ngIf="data.debts.length === 0" class="empty-state" style="padding: 20px;">
           <div class="empty-state-text text-muted">No debt payments this period</div>
         </div>
-        <div *ngFor="let debt of data.debts" class="detail-row">
+        <div *ngFor="let debt of data.debts" class="detail-row" [class.is-paid]="isPaid(debt.debtId || debt.name, 'debt')">
           <div class="detail-left">
+            <button class="paid-check" [class.checked]="isPaid(debt.debtId || debt.name, 'debt')" (click)="togglePaid(debt.debtId || debt.name, 'debt')">
+              {{ isPaid(debt.debtId || debt.name, 'debt') ? '✓' : '' }}
+            </button>
             <span class="detail-icon" style="background: var(--danger-dim); color: var(--danger);">🏦</span>
             <div>
               <div class="detail-name">{{ debt.name }} <span *ngIf="debt.paidEarly" class="early-badge">Paid Early</span></div>
@@ -148,7 +157,10 @@ import { ApiService } from '../../services/api.service';
               </div>
             </div>
           </div>
-          <span class="money text-danger">{{ debt.minimum_payment | currency }}</span>
+          <div class="detail-right">
+            <a *ngIf="debt.paymentUrl" [href]="debt.paymentUrl" target="_blank" rel="noopener" class="pay-link">Pay →</a>
+            <span class="money text-danger">{{ debt.minimum_payment | currency }}</span>
+          </div>
         </div>
         <div *ngIf="data.debts.length > 0" class="detail-total">
           <span>Total Minimums</span>
@@ -258,13 +270,66 @@ import { ApiService } from '../../services/api.service';
       align-items: center;
       padding: 12px 0;
       border-bottom: 1px solid var(--border);
+      transition: opacity 200ms;
     }
     .detail-row:last-child { border-bottom: none; }
     .detail-row.compact { padding: 8px 0; }
+    .detail-row.is-paid {
+      opacity: 0.45;
+    }
+    .detail-row.is-paid .detail-name {
+      text-decoration: line-through;
+    }
+    .paid-check {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      border: 2px solid var(--border);
+      background: transparent;
+      color: transparent;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 150ms;
+      padding: 0;
+    }
+    .paid-check:hover {
+      border-color: var(--accent);
+    }
+    .paid-check.checked {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--bg-primary);
+    }
     .detail-left {
       display: flex;
       align-items: center;
       gap: 12px;
+    }
+    .detail-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .pay-link {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 4px 10px;
+      border-radius: 6px;
+      white-space: nowrap;
+      transition: all 150ms;
+    }
+    .pay-link:hover {
+      background: var(--accent);
+      color: var(--bg-primary);
+      opacity: 1;
     }
     .detail-icon {
       width: 38px;
@@ -335,6 +400,7 @@ import { ApiService } from '../../services/api.service';
 })
 export class PeriodDetailComponent implements OnInit {
   data: any = null;
+  paidMap: Record<string, boolean> = {};
 
   constructor(
     private route: ActivatedRoute,
@@ -346,7 +412,27 @@ export class PeriodDetailComponent implements OnInit {
       const payDate = params.get('payDate');
       if (payDate) {
         this.api.getPeriodDetail(payDate).subscribe(d => this.data = d);
+        this.api.getPaidItems(payDate).subscribe(m => this.paidMap = m);
       }
     });
+  }
+
+  togglePaid(itemId: string, itemType: string) {
+    if (!this.data?.payDate) return;
+    this.api.togglePaidItem(this.data.payDate, itemId, itemType).subscribe(m => this.paidMap = m);
+  }
+
+  isPaid(itemId: string, itemType: string): boolean {
+    return !!this.paidMap[`${itemType}:${itemId}`];
+  }
+
+  get paidBillsCount(): number {
+    if (!this.data?.bills) return 0;
+    return this.data.bills.filter((b: any) => this.isPaid(b.id || b.name, 'bill')).length;
+  }
+
+  get paidDebtsCount(): number {
+    if (!this.data?.debts) return 0;
+    return this.data.debts.filter((d: any) => this.isPaid(d.debtId || d.name, 'debt')).length;
   }
 }

@@ -41,6 +41,8 @@ app.use('/api/categories', require('./routes/categories'));
 app.use('/api/bills', require('./routes/bills'));
 app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/debts', require('./routes/debts'));
+app.use('/api/subscriptions', require('./routes/subscriptions'));
+app.use('/api/paid', require('./routes/paid'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/review', require('./routes/review'));
 

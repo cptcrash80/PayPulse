@@ -11,9 +11,9 @@ router.get('/', (req, res) => {
 
     const payDates = [];
     const start = new Date(config.start_date);
-    const now = new Date();
+    const today = new Date().toISOString().split('T')[0];
     let current = new Date(start);
-    while (current <= now) current.setDate(current.getDate() + 14);
+    while (current.toISOString().split('T')[0] < today) current.setDate(current.getDate() + 14);
     let d = new Date(current);
     for (let i = 0; i < 26; i++) { payDates.push(d.toISOString().split('T')[0]); d = new Date(d); d.setDate(d.getDate() + 14); }
 

@@ -2,14 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../database');
 const { round2, calculatePayDates, getCurrentPayPeriod, buildPeriodShells,
-        generateObligations, balanceAllocations, computeSnowball, runFullSnowball, projectSnowballPayoff } = require('../engine');
+        generateObligations, balanceAllocations, computeSnowball, runFullSnowball, projectSnowballPayoff, getBillsWithSubscriptions } = require('../engine');
 
 router.get('/', (req, res) => {
   const db = getDb();
   const config = db.prepare('SELECT * FROM paycheck_config ORDER BY created_at DESC LIMIT 1').get();
   if (!config) return res.json({ configured: false, message: 'Please set up your paycheck first' });
 
-  const bills = db.prepare('SELECT * FROM recurring_bills WHERE is_active = 1').all();
+  const bills = getBillsWithSubscriptions();
   const debts = db.prepare('SELECT * FROM debts WHERE is_active = 1').all();
   const now = new Date();
   const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -116,7 +116,7 @@ router.get('/period/:payDate', (req, res) => {
   const config = db.prepare('SELECT * FROM paycheck_config ORDER BY created_at DESC LIMIT 1').get();
   if (!config) return res.status(400).json({ error: 'Paycheck not configured' });
 
-  const bills = db.prepare('SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM recurring_bills b LEFT JOIN categories c ON b.category_id = c.id WHERE b.is_active = 1').all();
+  const bills = getBillsWithSubscriptions();
   const debts = db.prepare('SELECT * FROM debts WHERE is_active = 1').all();
 
   const { balancedPeriods: balanced, snowball } = runFullSnowball(config, bills, debts, 26);
