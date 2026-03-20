@@ -188,4 +188,54 @@ router.get('/', (req, res) => {
   });
 });
 
+// CSV export of year review data
+router.get('/csv', (req, res) => {
+  try {
+    const db = getDb();
+    const config = db.prepare('SELECT * FROM paycheck_config ORDER BY created_at DESC LIMIT 1').get();
+    if (!config) return res.status(400).json({ error: 'Not configured' });
+
+    const requestedYear = parseInt(req.query.year) || new Date().getFullYear();
+    const allPayDates = calculatePayDates(config.start_date, 260);
+    const yearStart = `${requestedYear}-01-01`;
+    const yearEnd = `${requestedYear}-12-31`;
+    const yearPayDates = allPayDates.filter(d => d >= yearStart && d <= yearEnd);
+
+    if (yearPayDates.length === 0) return res.status(404).json({ error: 'No data for year' });
+
+    const bills = getBillsWithSubscriptions();
+    const activeDebts = db.prepare('SELECT * FROM debts WHERE is_active = 1').all();
+    const shells = buildPeriodShells(yearPayDates, config);
+    const obligations = generateObligations(bills, activeDebts, shells);
+    const balanced = balanceAllocations(obligations, shells, config);
+    for (const p of balanced) { p.totalBills = round2(p.totalBills); p.totalDebtMins = round2(p.totalDebtMins); }
+    const snowball = computeSnowball(balanced, activeDebts, config);
+
+    const rows = [['Pay Date', 'Income', 'Bills', 'Debt Minimums', 'Snowball Extra', 'Total Debt', 'Transfer', 'Expenses']];
+
+    balanced.forEach((p, i) => {
+      const sa = snowball.periodAllocations[i];
+      const expData = db.prepare('SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date < ?').get(p.periodStart, p.periodEnd);
+      rows.push([
+        p.payDate,
+        config.amount.toFixed(2),
+        p.totalBills.toFixed(2),
+        p.totalDebtMins.toFixed(2),
+        (sa?.snowballExtra || 0).toFixed(2),
+        (sa?.totalSnowball || p.totalDebtMins).toFixed(2),
+        p.transfer.toFixed(2),
+        round2(expData.total).toFixed(2)
+      ]);
+    });
+
+    const csv = rows.map(r => r.join(',')).join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="paypulse-${requestedYear}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    console.error('GET /api/review/csv error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

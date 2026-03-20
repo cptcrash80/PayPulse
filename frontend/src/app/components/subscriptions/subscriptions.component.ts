@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api.service';
+import { ToastService } from '../../services/toast.service';
 import { Category } from '../../models/models';
 
 @Component({
@@ -154,7 +155,7 @@ export class SubscriptionsComponent implements OnInit {
     }, 0);
   }
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private toast: ToastService) {}
 
   ngOnInit() {
     this.load();
@@ -182,6 +183,7 @@ export class SubscriptionsComponent implements OnInit {
   saveSub() {
     if (!this.form.name || !this.form.amount) return;
     this.error = '';
+    const isEdit = !!this.editing;
     const payload = {
       name: this.form.name,
       amount: this.form.amount,
@@ -192,18 +194,21 @@ export class SubscriptionsComponent implements OnInit {
       is_variable: this.form.is_variable ? 1 : 0,
       payment_url: this.form.payment_url || null
     };
-    const obs = this.editing
+    const obs = isEdit
       ? this.api.updateSubscription(this.editing.id, payload)
       : this.api.createSubscription(payload);
     obs.subscribe({
-      next: () => { this.load(); this.closeModal(); },
-      error: (err) => { this.error = err.error?.error || 'Save failed'; }
+      next: () => { this.load(); this.closeModal(); this.toast.success(isEdit ? 'Subscription updated' : 'Subscription added'); },
+      error: (err) => { this.error = err.error?.error || 'Save failed'; this.toast.error('Failed to save subscription'); }
     });
   }
 
   deleteSub(sub: any) {
     if (confirm(`Delete "${sub.name}"?`)) {
-      this.api.deleteSubscription(sub.id).subscribe(() => this.load());
+      this.api.deleteSubscription(sub.id).subscribe({
+        next: () => { this.load(); this.toast.success('Subscription deleted'); },
+        error: () => this.toast.error('Failed to delete subscription')
+      });
     }
   }
 

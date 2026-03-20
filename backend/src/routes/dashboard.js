@@ -105,9 +105,34 @@ router.get('/', (req, res) => {
     },
     debtBreakdown,
     expensesByCategory, spendingTrend, debtProgress,
-    recentExpenses: recentExpenses.slice(0, 10)
+    recentExpenses: recentExpenses.slice(0, 10),
+    upcomingBills: getUpcomingBills(bills, 5)
   });
 });
+
+function getUpcomingBills(bills, daysAhead) {
+  const today = new Date();
+  const upcoming = [];
+  for (const bill of bills) {
+    if (bill.frequency !== 'monthly') continue;
+    const thisMonth = new Date(today.getFullYear(), today.getMonth(), bill.due_day);
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, bill.due_day);
+    for (const dueDate of [thisMonth, nextMonth]) {
+      const diff = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (diff >= 0 && diff <= daysAhead) {
+        upcoming.push({
+          name: bill.name,
+          amount: bill.amount,
+          dueDate: dueDate.toISOString().split('T')[0],
+          daysUntil: diff,
+          autoPay: bill.auto_pay ? true : false,
+          isVariable: bill.is_variable ? true : false
+        });
+      }
+    }
+  }
+  return upcoming.sort((a, b) => a.daysUntil - b.daysUntil);
+}
 
 // ── Period Detail ───────────────────────────────────────────────────
 router.get('/period/:payDate', (req, res) => {

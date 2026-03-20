@@ -134,4 +134,14 @@ export class ApiService {
   setSnowballOverride(payDate: string, maxExtra: number | null, notes?: string): Observable<any> {
     return this.http.post(`${this.base}/paid/${payDate}/snowball`, { max_extra: maxExtra, notes });
   }
+
+  // Simulator
+  runSimulation(params: any): Observable<any> {
+    return this.http.post(`${this.base}/simulator`, params);
+  }
+
+  // Progress / Net Worth
+  getProgress(): Observable<any> {
+    return this.http.get(`${this.base}/progress`);
+  }
 }

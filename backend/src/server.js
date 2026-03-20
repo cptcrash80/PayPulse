@@ -45,6 +45,8 @@ app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/paid', require('./routes/paid'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/review', require('./routes/review'));
+app.use('/api/simulator', require('./routes/simulator'));
+app.use('/api/progress', require('./routes/progress'));
 
 // Serve Angular frontend in production
 const frontendPath = path.join(__dirname, '..', 'public');

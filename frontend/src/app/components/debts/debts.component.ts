@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api.service';
+import { ToastService } from '../../services/toast.service';
 import { Debt } from '../../models/models';
 
 @Component({
@@ -269,7 +270,7 @@ export class DebtsComponent implements OnInit {
   get totalMinPayments() { return this.debts.reduce((s, d) => s + d.minimum_payment, 0); }
   get totalPaid() { return this.debts.reduce((s, d) => s + (d.total_amount - d.remaining_amount), 0); }
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private toast: ToastService) {}
 
   ngOnInit() { this.load(); }
 
@@ -308,29 +309,33 @@ export class DebtsComponent implements OnInit {
       auto_pay: this.form.auto_pay ? 1 : 0,
       payment_url: this.form.payment_url || null
     };
-    const obs = this.editing
-      ? this.api.updateDebt(this.editing.id, payload)
+    const isEdit = !!this.editing;
+    const obs = isEdit
+      ? this.api.updateDebt(this.editing!.id, payload)
       : this.api.createDebt(payload);
     obs.subscribe({
-      next: () => { this.load(); this.closeModals(); },
+      next: () => { this.load(); this.closeModals(); this.toast.success(isEdit ? 'Debt updated' : 'Debt added'); },
       error: (err) => {
         this.error = err.error?.error || err.message || 'Save failed';
-        console.error('Save debt error:', err);
+        this.toast.error('Failed to save debt');
       }
     });
   }
 
   deleteDebt(debt: Debt) {
     if (confirm(`Delete "${debt.name}"?`)) {
-      this.api.deleteDebt(debt.id).subscribe(() => this.load());
+      this.api.deleteDebt(debt.id).subscribe({
+        next: () => { this.load(); this.toast.success('Debt deleted'); },
+        error: () => this.toast.error('Failed to delete debt')
+      });
     }
   }
 
   recordPayment() {
     if (!this.paymentDebt || !this.paymentForm.amount) return;
-    this.api.addDebtPayment(this.paymentDebt.id, this.paymentForm).subscribe(() => {
-      this.load();
-      this.closeModals();
+    this.api.addDebtPayment(this.paymentDebt.id, this.paymentForm).subscribe({
+      next: () => { this.load(); this.closeModals(); this.toast.success('Payment recorded'); },
+      error: () => this.toast.error('Failed to record payment')
     });
   }
 
