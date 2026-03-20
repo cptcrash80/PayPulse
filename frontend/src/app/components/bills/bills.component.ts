@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api.service';
+import { ToastService } from '../../services/toast.service';
 import { RecurringBill, Category } from '../../models/models';
 
 @Component({
@@ -155,7 +156,7 @@ export class BillsComponent implements OnInit {
     }, 0);
   }
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private toast: ToastService) {}
 
   ngOnInit() {
     this.load();
@@ -192,15 +193,22 @@ export class BillsComponent implements OnInit {
       is_variable: this.form.is_variable ? 1 : 0,
       payment_url: this.form.payment_url || null
     };
-    const obs = this.editing
-      ? this.api.updateBill(this.editing.id, payload)
+    const isEdit = !!this.editing;
+    const obs = isEdit
+      ? this.api.updateBill(this.editing!.id, payload)
       : this.api.createBill(payload);
-    obs.subscribe(() => { this.load(); this.closeModal(); });
+    obs.subscribe({
+      next: () => { this.load(); this.closeModal(); this.toast.success(isEdit ? 'Bill updated' : 'Bill added'); },
+      error: () => this.toast.error('Failed to save bill')
+    });
   }
 
   deleteBill(bill: RecurringBill) {
     if (confirm(`Delete "${bill.name}"?`)) {
-      this.api.deleteBill(bill.id).subscribe(() => this.load());
+      this.api.deleteBill(bill.id).subscribe({
+        next: () => { this.load(); this.toast.success('Bill deleted'); },
+        error: () => this.toast.error('Failed to delete bill')
+      });
     }
   }
 

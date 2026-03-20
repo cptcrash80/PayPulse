@@ -14,9 +14,12 @@ import { ApiService } from '../../services/api.service';
           <h2>📅 {{ selectedYear }} Year Review</h2>
           <p>Annual financial summary across all pay periods</p>
         </div>
-        <select [(ngModel)]="selectedYear" (ngModelChange)="load()" class="year-select">
-          <option *ngFor="let y of data?.availableYears" [ngValue]="y">{{ y }}</option>
-        </select>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <a *ngIf="data?.summary" [href]="'/api/review/csv?year=' + selectedYear" download class="btn-sm btn-secondary">📥 Export CSV</a>
+          <select [(ngModel)]="selectedYear" (ngModelChange)="load()" class="year-select">
+            <option *ngFor="let y of data?.availableYears" [ngValue]="y">{{ y }}</option>
+          </select>
+        </div>
       </div>
     </div>
 

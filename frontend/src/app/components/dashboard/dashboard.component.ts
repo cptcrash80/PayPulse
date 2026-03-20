@@ -48,6 +48,27 @@ import { DashboardData } from '../../models/models';
         </div>
       </div>
 
+      <!-- Upcoming bills banner -->
+      <div *ngIf="data.upcomingBills?.length" class="upcoming-banner card" style="margin-bottom: 24px;">
+        <div class="upcoming-header">
+          <span class="upcoming-icon">⏰</span>
+          <span class="upcoming-title">{{ data.upcomingBills.length }} bill{{ data.upcomingBills.length > 1 ? 's' : '' }} due in the next 5 days</span>
+        </div>
+        <div class="upcoming-items">
+          <div *ngFor="let bill of data.upcomingBills" class="upcoming-item">
+            <div class="upcoming-item-left">
+              <span class="upcoming-name">{{ bill.name }}</span>
+              <span class="upcoming-due text-muted">{{ bill.daysUntil === 0 ? 'Due today' : bill.daysUntil === 1 ? 'Due tomorrow' : 'Due in ' + bill.daysUntil + ' days' }}</span>
+            </div>
+            <div class="upcoming-item-right">
+              <span *ngIf="bill.autoPay" class="tag" style="background: var(--info-dim); color: var(--info); font-size: 0.7rem;">Auto</span>
+              <span *ngIf="bill.isVariable" class="text-warning">~</span>
+              <span class="money">{{ bill.amount | currency }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Charts row -->
       <div class="grid-3" style="margin-bottom: 24px;">
         <!-- Spending trend -->
@@ -275,6 +296,31 @@ import { DashboardData } from '../../models/models';
       border-color: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-dim);
     }
+    .upcoming-banner {
+      background: var(--bg-secondary);
+      border-left: 4px solid var(--warning);
+    }
+    .upcoming-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .upcoming-icon { font-size: 1.2rem; }
+    .upcoming-title { font-weight: 600; font-size: 0.95rem; }
+    .upcoming-items { display: flex; flex-direction: column; gap: 8px; }
+    .upcoming-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-sm);
+    }
+    .upcoming-item-left { display: flex; flex-direction: column; gap: 2px; }
+    .upcoming-name { font-weight: 500; font-size: 0.88rem; }
+    .upcoming-due { font-size: 0.78rem; }
+    .upcoming-item-right { display: flex; align-items: center; gap: 8px; }
     .period-date {
       font-weight: 700;
       font-size: 1.05rem;

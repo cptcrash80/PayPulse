@@ -11,5 +11,7 @@ export const routes: Routes = [
   { path: 'subscriptions', loadComponent: () => import('./components/subscriptions/subscriptions.component').then(m => m.SubscriptionsComponent) },
   { path: 'categories', loadComponent: () => import('./components/categories/categories.component').then(m => m.CategoriesComponent) },
   { path: 'review', loadComponent: () => import('./components/year-review/year-review.component').then(m => m.YearReviewComponent) },
+  { path: 'simulator', loadComponent: () => import('./components/simulator/simulator.component').then(m => m.SimulatorComponent) },
+  { path: 'progress', loadComponent: () => import('./components/progress/progress.component').then(m => m.ProgressComponent) },
   { path: '**', redirectTo: 'dashboard' }
 ];

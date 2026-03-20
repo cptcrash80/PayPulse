@@ -3,6 +3,7 @@ import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api.service';
+import { ToastService } from '../../services/toast.service';
 
 @Component({
   selector: 'app-period-detail',
@@ -512,7 +513,8 @@ export class PeriodDetailComponent implements OnInit {
 
   constructor(
     private route: ActivatedRoute,
-    private api: ApiService
+    private api: ApiService,
+    private toast: ToastService
   ) {}
 
   ngOnInit() {
@@ -542,7 +544,7 @@ export class PeriodDetailComponent implements OnInit {
 
   skipSnowball() {
     if (!this.data?.payDate) return;
-    this.api.setSnowballOverride(this.data.payDate, 0).subscribe(() => this.reloadData());
+    this.api.setSnowballOverride(this.data.payDate, 0).subscribe(() => { this.reloadData(); this.toast.warning('Snowball skipped for this period'); });
   }
 
   enableCustomSnowball() {
@@ -552,12 +554,12 @@ export class PeriodDetailComponent implements OnInit {
 
   saveCustomSnowball() {
     if (!this.data?.payDate) return;
-    this.api.setSnowballOverride(this.data.payDate, this.customSnowballAmount).subscribe(() => this.reloadData());
+    this.api.setSnowballOverride(this.data.payDate, this.customSnowballAmount).subscribe(() => { this.reloadData(); this.toast.success('Snowball adjusted'); });
   }
 
   clearSnowballOverride() {
     if (!this.data?.payDate) return;
-    this.api.setSnowballOverride(this.data.payDate, null).subscribe(() => this.reloadData());
+    this.api.setSnowballOverride(this.data.payDate, null).subscribe(() => { this.reloadData(); this.toast.success('Snowball restored to normal'); });
   }
 
   private reloadData() {

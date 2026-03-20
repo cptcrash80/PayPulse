@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api.service';
+import { ToastService } from '../../services/toast.service';
 import { Expense, Category } from '../../models/models';
 
 @Component({
@@ -151,7 +152,7 @@ export class ExpensesComponent implements OnInit {
     return this.expenses.reduce((s, e) => s + e.amount, 0);
   }
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private toast: ToastService) {}
 
   ngOnInit() {
     this.load();
@@ -166,9 +167,13 @@ export class ExpensesComponent implements OnInit {
 
   quickAdd() {
     if (!this.quickForm.name || !this.quickForm.amount) return;
-    this.api.createExpense(this.quickForm).subscribe(() => {
-      this.quickForm = { name: '', amount: 0, category_id: null, date: new Date().toISOString().split('T')[0] };
-      this.load();
+    this.api.createExpense(this.quickForm).subscribe({
+      next: () => {
+        this.toast.success(`Added $${this.quickForm.amount.toFixed(2)} expense`);
+        this.quickForm = { name: '', amount: 0, category_id: null, date: new Date().toISOString().split('T')[0] };
+        this.load();
+      },
+      error: () => this.toast.error('Failed to add expense')
     });
   }
 
@@ -183,15 +188,18 @@ export class ExpensesComponent implements OnInit {
   }
 
   saveEdit() {
-    this.api.updateExpense(this.editingId, this.editForm).subscribe(() => {
-      this.load();
-      this.closeModal();
+    this.api.updateExpense(this.editingId, this.editForm).subscribe({
+      next: () => { this.load(); this.closeModal(); this.toast.success('Expense updated'); },
+      error: () => this.toast.error('Failed to update expense')
     });
   }
 
   deleteExpense(exp: Expense) {
     if (confirm(`Delete "${exp.name}"?`)) {
-      this.api.deleteExpense(exp.id).subscribe(() => this.load());
+      this.api.deleteExpense(exp.id).subscribe({
+        next: () => { this.load(); this.toast.success('Expense deleted'); },
+        error: () => this.toast.error('Failed to delete expense')
+      });
     }
   }
 }
