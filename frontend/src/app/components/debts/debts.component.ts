@@ -148,6 +148,11 @@ import { Debt } from '../../models/models';
           </small>
         </div>
 
+        <div class="form-group">
+          <label>Payment URL (optional)</label>
+          <input type="url" [(ngModel)]="form.payment_url" placeholder="https://...">
+        </div>
+
         <div *ngIf="error" style="background: var(--danger-dim); color: var(--danger); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; margin-top: 8px;">
           {{ error }}
         </div>
@@ -257,7 +262,7 @@ export class DebtsComponent implements OnInit {
   editing: Debt | null = null;
   paymentDebt: Debt | null = null;
   error = '';
-  form: any = { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false };
+  form: any = { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false, payment_url: '' };
   paymentForm: any = { amount: 0, date: new Date().toISOString().split('T')[0], notes: '' };
 
   get totalRemaining() { return this.debts.reduce((s, d) => s + d.remaining_amount, 0); }
@@ -272,7 +277,7 @@ export class DebtsComponent implements OnInit {
 
   openModal(debt?: Debt) {
     this.editing = debt || null;
-    this.form = debt ? { ...debt, auto_pay: !!debt.auto_pay } : { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false };
+    this.form = debt ? { ...debt, auto_pay: !!debt.auto_pay, payment_url: debt.payment_url || '' } : { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false, payment_url: '' };
     this.showModal = true;
     this.error = '';
   }
@@ -300,7 +305,8 @@ export class DebtsComponent implements OnInit {
       due_day: this.form.due_day || null,
       priority: this.form.priority || 0,
       is_active: 1,
-      auto_pay: this.form.auto_pay ? 1 : 0
+      auto_pay: this.form.auto_pay ? 1 : 0,
+      payment_url: this.form.payment_url || null
     };
     const obs = this.editing
       ? this.api.updateDebt(this.editing.id, payload)

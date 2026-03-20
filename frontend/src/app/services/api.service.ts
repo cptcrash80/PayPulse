@@ -96,4 +96,26 @@ export class ApiService {
   getYearReview(year: number): Observable<any> {
     return this.http.get(`${this.base}/review?year=${year}`);
   }
+
+  // Subscriptions
+  getSubscriptions(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.base}/subscriptions`);
+  }
+  createSubscription(data: any): Observable<any> {
+    return this.http.post(`${this.base}/subscriptions`, data);
+  }
+  updateSubscription(id: string, data: any): Observable<any> {
+    return this.http.put(`${this.base}/subscriptions/${id}`, data);
+  }
+  deleteSubscription(id: string): Observable<any> {
+    return this.http.delete(`${this.base}/subscriptions/${id}`);
+  }
+
+  // Period paid tracking
+  getPaidItems(payDate: string): Observable<Record<string, boolean>> {
+    return this.http.get<Record<string, boolean>>(`${this.base}/paid/${payDate}`);
+  }
+  togglePaidItem(payDate: string, itemId: string, itemType: string): Observable<Record<string, boolean>> {
+    return this.http.post<Record<string, boolean>>(`${this.base}/paid/${payDate}`, { item_id: itemId, item_type: itemType });
+  }
 }

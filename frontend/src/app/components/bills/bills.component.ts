@@ -113,6 +113,11 @@ import { RecurringBill, Category } from '../../models/models';
           </small>
         </div>
 
+        <div class="form-group">
+          <label>Payment URL (optional)</label>
+          <input type="url" [(ngModel)]="form.payment_url" placeholder="https://...">
+        </div>
+
         <div class="modal-actions">
           <button class="btn-secondary" (click)="closeModal()">Cancel</button>
           <button class="btn-primary" (click)="saveBill()">{{ editing ? 'Update' : 'Add' }} Bill</button>
@@ -126,7 +131,7 @@ export class BillsComponent implements OnInit {
   categories: Category[] = [];
   showModal = false;
   editing: RecurringBill | null = null;
-  form: any = { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', auto_pay: false };
+  form: any = { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', auto_pay: false, payment_url: '' };
 
   get totalMonthly(): number {
     return this.bills.reduce((sum, b) => {
@@ -150,7 +155,7 @@ export class BillsComponent implements OnInit {
 
   openModal(bill?: RecurringBill) {
     this.editing = bill || null;
-    this.form = bill ? { ...bill, auto_pay: !!bill.auto_pay } : { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', auto_pay: false };
+    this.form = bill ? { ...bill, auto_pay: !!bill.auto_pay, payment_url: bill.payment_url || '' } : { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', auto_pay: false, payment_url: '' };
     this.showModal = true;
   }
 
@@ -168,7 +173,8 @@ export class BillsComponent implements OnInit {
       due_day: this.form.due_day,
       frequency: this.form.frequency || 'monthly',
       is_active: 1,
-      auto_pay: this.form.auto_pay ? 1 : 0
+      auto_pay: this.form.auto_pay ? 1 : 0,
+      payment_url: this.form.payment_url || null
     };
     const obs = this.editing
       ? this.api.updateBill(this.editing.id, payload)

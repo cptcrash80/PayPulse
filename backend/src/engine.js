@@ -12,9 +12,11 @@ function getMonthsInRange(start, end) {
 }
 
 function calculatePayDates(startDate, count) {
-  const dates = [], start = new Date(startDate), now = new Date();
+  const dates = [], start = new Date(startDate);
+  const today = new Date().toISOString().split('T')[0];
   let current = new Date(start);
-  while (current <= now) current.setDate(current.getDate() + 14);
+  // Advance until current is on or after today
+  while (current.toISOString().split('T')[0] < today) current.setDate(current.getDate() + 14);
   let d = new Date(current);
   for (let i = 0; i < count; i++) { dates.push(d.toISOString().split('T')[0]); d = new Date(d); d.setDate(d.getDate() + 14); }
   return dates;
@@ -115,7 +117,7 @@ function balanceAllocations(items, periods, config) {
   for (const p of periods) { p.bills = []; p.debts = []; p.totalBills = 0; p.totalDebtMins = 0; }
   for (const a of assignments) {
     const p = periods[a.assignedPeriodIdx];
-    const entry = { name: a.name, amount: a.amount, dueDate: a.dueDate, frequency: a.frequency, paidEarly: a.assignedPeriodIdx < a.deadlinePeriodIdx, autoPay: a.autoPay || false };
+    const entry = { id: a.data?.id || null, name: a.name, amount: a.amount, dueDate: a.dueDate, frequency: a.frequency, paidEarly: a.assignedPeriodIdx < a.deadlinePeriodIdx, autoPay: a.autoPay || false, paymentUrl: a.data?.payment_url || null };
     if (a.type === 'bill') { p.bills.push(entry); p.totalBills += a.amount; }
     else { p.debts.push({ ...entry, remaining: a.remaining, interestRate: a.interestRate, debtId: a.debtId }); p.totalDebtMins += a.amount; }
   }
@@ -329,8 +331,28 @@ function runFullSnowball(config, bills, debts, periodCount) {
   return { balancedPeriods: balanced, snowball };
 }
 
+/**
+ * Fetch active bills + active subscriptions merged into one array.
+ * Subscriptions are treated as auto_pay bills.
+ */
+function getBillsWithSubscriptions() {
+  const db = getDb();
+  const bills = db.prepare('SELECT * FROM recurring_bills WHERE is_active = 1').all();
+  const subs = db.prepare('SELECT * FROM subscriptions WHERE is_active = 1').all();
+  const merged = [
+    ...bills,
+    ...subs.map(s => ({
+      ...s,
+      auto_pay: 1,
+      _isSub: true
+    }))
+  ];
+  return merged;
+}
+
 module.exports = {
   round2, getMonthsInRange, calculatePayDates, getCurrentPayPeriod,
   buildPeriodShells, generateObligations, balanceAllocations,
-  computeSnowball, runFullSnowball, projectSnowballPayoff
+  computeSnowball, runFullSnowball, projectSnowballPayoff,
+  getBillsWithSubscriptions
 };

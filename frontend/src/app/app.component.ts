@@ -42,6 +42,11 @@ import { CommonModule } from '@angular/common';
             </a>
           </li>
           <li>
+            <a routerLink="/subscriptions" routerLinkActive="active" (click)="sidebarOpen = false">
+              <span class="nav-icon">🔄</span> Subscriptions
+            </a>
+          </li>
+          <li>
             <a routerLink="/categories" routerLinkActive="active" (click)="sidebarOpen = false">
               <span class="nav-icon">🏷️</span> Categories
             </a>

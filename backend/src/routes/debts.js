@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../database');
 const { v4: uuidv4 } = require('uuid');
-const { runFullSnowball, projectSnowballPayoff } = require('../engine');
+const { runFullSnowball, projectSnowballPayoff, getBillsWithSubscriptions } = require('../engine');
 
 router.get('/', (req, res) => {
   try {
@@ -13,7 +13,7 @@ router.get('/', (req, res) => {
     const config = db.prepare('SELECT * FROM paycheck_config ORDER BY created_at DESC LIMIT 1').get();
     let payoffMap = {};
     if (config) {
-      const bills = db.prepare('SELECT * FROM recurring_bills WHERE is_active = 1').all();
+      const bills = getBillsWithSubscriptions();
       const activeDebts = db.prepare('SELECT * FROM debts WHERE is_active = 1').all();
       const { balancedPeriods } = runFullSnowball(config, bills, activeDebts, 6);
       const projection = projectSnowballPayoff(balancedPeriods, activeDebts, config);
@@ -37,12 +37,11 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const db = getDb();
-    const { name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, auto_pay } = req.body;
-    console.log('POST /debts body:', JSON.stringify(req.body));
+    const { name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, auto_pay, payment_url } = req.body;
     const id = uuidv4();
     db.prepare(
-      'INSERT INTO debts (id, name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, auto_pay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, name, total_amount, remaining_amount ?? total_amount, minimum_payment || 0, interest_rate || 0, due_day || null, priority || 0, auto_pay ? 1 : 0);
+      'INSERT INTO debts (id, name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, auto_pay, payment_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, name, total_amount, remaining_amount ?? total_amount, minimum_payment || 0, interest_rate || 0, due_day || null, priority || 0, auto_pay ? 1 : 0, payment_url || null);
     const debt = db.prepare('SELECT * FROM debts WHERE id = ?').get(id);
     res.json({ ...debt, payments: [], snowballEstimate: null });
   } catch (err) {
@@ -55,9 +54,7 @@ router.put('/:id', (req, res) => {
   try {
     const db = getDb();
     const body = req.body;
-    console.log('PUT /debts/:id body:', JSON.stringify(body));
 
-    // Extract only DB-safe fields with defaults
     const name = body.name;
     const total_amount = body.total_amount || 0;
     const remaining_amount = body.remaining_amount ?? 0;
@@ -67,12 +64,11 @@ router.put('/:id', (req, res) => {
     const priority = body.priority || 0;
     const is_active = body.is_active ? 1 : 0;
     const auto_pay = body.auto_pay ? 1 : 0;
-
-    console.log('PUT /debts/:id params:', { name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, is_active, auto_pay, id: req.params.id });
+    const payment_url = body.payment_url || null;
 
     db.prepare(
-      `UPDATE debts SET name=?, total_amount=?, remaining_amount=?, minimum_payment=?, interest_rate=?, due_day=?, priority=?, is_active=?, auto_pay=?, updated_at=datetime('now') WHERE id=?`
-    ).run(name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, is_active, auto_pay, req.params.id);
+      `UPDATE debts SET name=?, total_amount=?, remaining_amount=?, minimum_payment=?, interest_rate=?, due_day=?, priority=?, is_active=?, auto_pay=?, payment_url=?, updated_at=datetime('now') WHERE id=?`
+    ).run(name, total_amount, remaining_amount, minimum_payment, interest_rate, due_day, priority, is_active, auto_pay, payment_url, req.params.id);
 
     const debt = db.prepare('SELECT * FROM debts WHERE id = ?').get(req.params.id);
     const payments = db.prepare('SELECT * FROM debt_payments WHERE debt_id = ? ORDER BY date DESC').all(req.params.id);
