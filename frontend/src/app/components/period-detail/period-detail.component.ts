@@ -1,12 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 
 @Component({
   selector: 'app-period-detail',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, RouterLink],
+  imports: [CommonModule, CurrencyPipe, DatePipe, RouterLink, FormsModule],
   template: `
     <div class="page-header">
       <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 4px;">
@@ -37,8 +38,11 @@ import { ApiService } from '../../services/api.service';
         <span class="money flow-amount text-warning">-{{ data.totals.bills | currency }}</span>
       </div>
       <div class="flow-row">
-        <span class="flow-label">Debt Minimums</span>
-        <span class="money flow-amount text-danger">-{{ data.totals.debtMinimums | currency }}</span>
+        <span class="flow-label">Debt Payments (incl. snowball)</span>
+        <span class="money flow-amount text-danger">-{{ data.totals.totalSnowball | currency }}</span>
+      </div>
+      <div class="flow-row" *ngIf="data.totals.snowballExtra > 0" style="padding-left: 24px;">
+        <span class="flow-label text-muted" style="font-size: 0.82rem;">↳ Minimums {{ data.totals.debtMinimums | currency }} + Extra {{ data.totals.snowballExtra | currency }}</span>
       </div>
       <div class="flow-row">
         <span class="flow-label">Savings Transfer</span>
@@ -66,34 +70,55 @@ import { ApiService } from '../../services/api.service';
         <span class="flow-label">Remaining</span>
         <span class="money flow-amount" [class.text-accent]="data.totals.remaining >= 0" [class.text-danger]="data.totals.remaining < 0">{{ data.totals.remaining | currency }}</span>
       </div>
-      <div class="flow-row surplus" *ngIf="data.totals.snowballExtra > 0">
-        <span class="flow-label">⛄ Snowball Extra → Debt</span>
-        <span class="money flow-amount text-accent">{{ data.totals.snowballExtra | currency }}</span>
-      </div>
     </div>
 
     <!-- Snowball payments for this period -->
-    <div class="card snowball-card" *ngIf="data?.snowball?.snowballPayments?.length" style="margin-top: 24px;">
+    <div class="card snowball-card" *ngIf="data?.snowball" style="margin-top: 24px;">
       <div class="card-header">
         <span class="card-title">⛄ Snowball Payments This Period</span>
-        <span class="tag" style="background: var(--accent-dim); color: var(--accent);">{{ data.snowball.totalSnowball | currency }} total</span>
+        <span *ngIf="!data.snowball.snowballSkipped" class="tag" style="background: var(--accent-dim); color: var(--accent);">{{ data.snowball.totalSnowball | currency }} total</span>
+        <span *ngIf="data.snowball.snowballSkipped" class="tag" style="background: var(--warning-dim); color: var(--warning);">Skipped</span>
       </div>
-      <div class="snowball-target" *ngIf="data.snowball.snowballTarget">
-        Current target: <strong>{{ data.snowball.snowballTarget }}</strong> (smallest balance)
-      </div>
-      <div *ngFor="let p of data.snowball.snowballPayments" class="snowball-payment-row">
-        <div class="snowball-payment-left">
-          <span class="detail-icon" [style.background]="p.extra > 0 ? 'var(--accent-dim)' : 'var(--danger-dim)'" [style.color]="p.extra > 0 ? 'var(--accent)' : 'var(--danger)'">🏦</span>
-          <div>
-            <div class="detail-name">{{ p.debtName }}</div>
-            <div class="detail-meta text-muted">
-              Min {{ p.minimum | currency }}
-              <span *ngIf="p.extra > 0"> + {{ p.extra | currency }} extra</span>
-              · {{ p.remainingAfter | currency }} remaining after
-            </div>
+
+      <!-- Snowball override controls -->
+      <div class="snowball-controls">
+        <div class="snowball-control-row">
+          <span class="snowball-control-label">Snowball extra this period:</span>
+          <div class="snowball-control-actions">
+            <button class="btn-sm" [class.btn-primary]="!snowballOverrideActive" [class.btn-secondary]="snowballOverrideActive" (click)="clearSnowballOverride()">Normal</button>
+            <button class="btn-sm" [class.btn-danger]="snowballOverrideMode === 'skip'" [class.btn-secondary]="snowballOverrideMode !== 'skip'" (click)="skipSnowball()">Skip</button>
+            <button class="btn-sm" [class.btn-primary]="snowballOverrideMode === 'custom'" [class.btn-secondary]="snowballOverrideMode !== 'custom'" (click)="enableCustomSnowball()">Custom</button>
+            <input *ngIf="snowballOverrideMode === 'custom'" type="number" class="snowball-custom-input" [(ngModel)]="customSnowballAmount" (change)="saveCustomSnowball()" step="0.01" min="0" placeholder="Max extra">
           </div>
         </div>
-        <span class="money" [class.text-accent]="p.extra > 0" [class.text-danger]="p.extra === 0">{{ p.total | currency }}</span>
+        <div *ngIf="data.snowball.snowballOverrideNotes" class="snowball-override-note text-muted">
+          Note: {{ data.snowball.snowballOverrideNotes }}
+        </div>
+      </div>
+
+      <div *ngIf="data.snowball.snowballSkipped" class="snowball-skipped-msg">
+        <span class="text-warning">Snowball extra skipped for this period. Minimums are still paid.</span>
+      </div>
+
+      <div *ngIf="data.snowball.snowballTarget && !data.snowball.snowballSkipped" class="snowball-target">
+        Current target: <strong>{{ data.snowball.snowballTarget }}</strong> (smallest balance)
+      </div>
+
+      <div *ngIf="data.snowball.snowballPayments?.length && !data.snowball.snowballSkipped">
+        <div *ngFor="let p of data.snowball.snowballPayments" class="snowball-payment-row">
+          <div class="snowball-payment-left">
+            <span class="detail-icon" [style.background]="p.extra > 0 ? 'var(--accent-dim)' : 'var(--danger-dim)'" [style.color]="p.extra > 0 ? 'var(--accent)' : 'var(--danger)'">🏦</span>
+            <div>
+              <div class="detail-name">{{ p.debtName }}</div>
+              <div class="detail-meta text-muted">
+                Min {{ p.minimum | currency }}
+                <span *ngIf="p.extra > 0"> + {{ p.extra | currency }} extra</span>
+                · {{ p.remainingAfter | currency }} remaining after
+              </div>
+            </div>
+          </div>
+          <span class="money" [class.text-accent]="p.extra > 0" [class.text-danger]="p.extra === 0">{{ p.total | currency }}</span>
+        </div>
       </div>
     </div>
 
@@ -125,7 +150,11 @@ import { ApiService } from '../../services/api.service';
           </div>
           <div class="detail-right">
             <a *ngIf="bill.paymentUrl" [href]="bill.paymentUrl" target="_blank" rel="noopener" class="pay-link">Pay →</a>
-            <span class="money text-warning">{{ bill.amount | currency }}</span>
+            <span *ngIf="!bill.isVariable" class="money text-warning">{{ bill.amount | currency }}</span>
+            <span *ngIf="bill.isVariable" class="variable-amount">
+              <span class="variable-badge">~</span>
+              <input type="number" class="amount-input" [value]="getDisplayAmount(bill, 'bill')" (change)="updateOverride(bill, 'bill', $event)" step="0.01" min="0">
+            </span>
           </div>
         </div>
         <div *ngIf="data.bills.length > 0" class="detail-total">
@@ -148,23 +177,29 @@ import { ApiService } from '../../services/api.service';
             <button class="paid-check" [class.checked]="isPaid(debt.debtId || debt.name, 'debt')" (click)="togglePaid(debt.debtId || debt.name, 'debt')">
               {{ isPaid(debt.debtId || debt.name, 'debt') ? '✓' : '' }}
             </button>
-            <span class="detail-icon" style="background: var(--danger-dim); color: var(--danger);">🏦</span>
+            <span class="detail-icon" [style.background]="debt.snowballExtra > 0 ? 'var(--accent-dim)' : 'var(--danger-dim)'" [style.color]="debt.snowballExtra > 0 ? 'var(--accent)' : 'var(--danger)'">🏦</span>
             <div>
-              <div class="detail-name">{{ debt.name }} <span *ngIf="debt.paidEarly" class="early-badge">Paid Early</span></div>
+              <div class="detail-name">
+                {{ debt.name }}
+                <span *ngIf="debt.paidEarly" class="early-badge">Paid Early</span>
+                <span *ngIf="debt.snowballOnly" class="early-badge" style="background: var(--accent-dim); color: var(--accent);">Snowball</span>
+              </div>
               <div class="detail-meta text-muted">
                 <span *ngIf="debt.dueDate">Due {{ debt.dueDate | date:'MMM d' }} · </span>
-                {{ debt.remaining_amount | currency }} remaining
+                <span *ngIf="debt.minimum_payment > 0">Min {{ debt.minimum_payment | currency }}</span>
+                <span *ngIf="debt.snowballExtra > 0"> + {{ debt.snowballExtra | currency }} extra</span>
+                <span *ngIf="debt.remainingAfterSnowball !== undefined"> · {{ debt.remainingAfterSnowball | currency }} after</span>
               </div>
             </div>
           </div>
           <div class="detail-right">
             <a *ngIf="debt.paymentUrl" [href]="debt.paymentUrl" target="_blank" rel="noopener" class="pay-link">Pay →</a>
-            <span class="money text-danger">{{ debt.minimum_payment | currency }}</span>
+            <span class="money" [class.text-accent]="debt.snowballExtra > 0" [class.text-danger]="!debt.snowballExtra">{{ (debt.snowballTotal != null ? debt.snowballTotal : debt.minimum_payment) | currency }}</span>
           </div>
         </div>
         <div *ngIf="data.debts.length > 0" class="detail-total">
-          <span>Total Minimums</span>
-          <span class="money">{{ data.totals.debtMinimums | currency }}</span>
+          <span>Total Debt Payments</span>
+          <span class="money">{{ data.totals.totalSnowball | currency }}</span>
         </div>
 
         <!-- Actual payments made -->
@@ -331,6 +366,33 @@ import { ApiService } from '../../services/api.service';
       color: var(--bg-primary);
       opacity: 1;
     }
+    .variable-amount {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .variable-badge {
+      font-size: 0.85rem;
+      color: var(--warning);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .amount-input {
+      width: 90px;
+      padding: 4px 8px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--warning);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      text-align: right;
+    }
+    .amount-input:focus {
+      border-color: var(--warning);
+      box-shadow: 0 0 0 2px var(--warning-dim);
+    }
     .detail-icon {
       width: 38px;
       height: 38px;
@@ -375,6 +437,48 @@ import { ApiService } from '../../services/api.service';
       margin-bottom: 8px;
     }
     .snowball-card { }
+    .snowball-controls {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+    }
+    .snowball-control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .snowball-control-label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+    .snowball-control-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .snowball-custom-input {
+      width: 100px;
+      padding: 6px 10px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      text-align: right;
+    }
+    .snowball-override-note {
+      font-size: 0.8rem;
+      margin-top: 8px;
+    }
+    .snowball-skipped-msg {
+      padding: 12px 16px;
+      background: var(--warning-dim);
+      border-radius: var(--radius-sm);
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+    }
     .snowball-target {
       font-size: 0.85rem;
       color: var(--text-secondary);
@@ -401,6 +505,10 @@ import { ApiService } from '../../services/api.service';
 export class PeriodDetailComponent implements OnInit {
   data: any = null;
   paidMap: Record<string, boolean> = {};
+  overrides: Record<string, number> = {};
+  snowballOverrideMode: 'normal' | 'skip' | 'custom' = 'normal';
+  snowballOverrideActive = false;
+  customSnowballAmount = 0;
 
   constructor(
     private route: ActivatedRoute,
@@ -411,8 +519,61 @@ export class PeriodDetailComponent implements OnInit {
     this.route.paramMap.subscribe(params => {
       const payDate = params.get('payDate');
       if (payDate) {
-        this.api.getPeriodDetail(payDate).subscribe(d => this.data = d);
+        this.api.getPeriodDetail(payDate).subscribe(d => {
+          this.data = d;
+          // Set override UI state from snowball data
+          if (d.snowball?.snowballSkipped) {
+            this.snowballOverrideMode = 'skip';
+            this.snowballOverrideActive = true;
+          } else if (d.snowball?.snowballCapped) {
+            this.snowballOverrideMode = 'custom';
+            this.snowballOverrideActive = true;
+            this.customSnowballAmount = d.snowball.snowballOverride;
+          } else {
+            this.snowballOverrideMode = 'normal';
+            this.snowballOverrideActive = false;
+          }
+        });
         this.api.getPaidItems(payDate).subscribe(m => this.paidMap = m);
+        this.api.getAmountOverrides(payDate).subscribe(o => this.overrides = o);
+      }
+    });
+  }
+
+  skipSnowball() {
+    if (!this.data?.payDate) return;
+    this.api.setSnowballOverride(this.data.payDate, 0).subscribe(() => this.reloadData());
+  }
+
+  enableCustomSnowball() {
+    this.snowballOverrideMode = 'custom';
+    this.customSnowballAmount = this.data?.snowball?.snowballExtra || 0;
+  }
+
+  saveCustomSnowball() {
+    if (!this.data?.payDate) return;
+    this.api.setSnowballOverride(this.data.payDate, this.customSnowballAmount).subscribe(() => this.reloadData());
+  }
+
+  clearSnowballOverride() {
+    if (!this.data?.payDate) return;
+    this.api.setSnowballOverride(this.data.payDate, null).subscribe(() => this.reloadData());
+  }
+
+  private reloadData() {
+    if (!this.data?.payDate) return;
+    this.api.getPeriodDetail(this.data.payDate).subscribe(d => {
+      this.data = d;
+      if (d.snowball?.snowballSkipped) {
+        this.snowballOverrideMode = 'skip';
+        this.snowballOverrideActive = true;
+      } else if (d.snowball?.snowballCapped) {
+        this.snowballOverrideMode = 'custom';
+        this.snowballOverrideActive = true;
+        this.customSnowballAmount = d.snowball.snowballOverride;
+      } else {
+        this.snowballOverrideMode = 'normal';
+        this.snowballOverrideActive = false;
       }
     });
   }
@@ -424,6 +585,19 @@ export class PeriodDetailComponent implements OnInit {
 
   isPaid(itemId: string, itemType: string): boolean {
     return !!this.paidMap[`${itemType}:${itemId}`];
+  }
+
+  getDisplayAmount(item: any, itemType: string): number {
+    const key = `${itemType}:${item.id || item.name}`;
+    return this.overrides[key] ?? item.amount;
+  }
+
+  updateOverride(item: any, itemType: string, event: Event) {
+    const input = event.target as HTMLInputElement;
+    const amount = parseFloat(input.value);
+    if (isNaN(amount) || amount < 0 || !this.data?.payDate) return;
+    this.api.setAmountOverride(this.data.payDate, item.id || item.name, itemType, amount)
+      .subscribe(o => this.overrides = o);
   }
 
   get paidBillsCount(): number {

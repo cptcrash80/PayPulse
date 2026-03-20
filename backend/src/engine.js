@@ -117,7 +117,7 @@ function balanceAllocations(items, periods, config) {
   for (const p of periods) { p.bills = []; p.debts = []; p.totalBills = 0; p.totalDebtMins = 0; }
   for (const a of assignments) {
     const p = periods[a.assignedPeriodIdx];
-    const entry = { id: a.data?.id || null, name: a.name, amount: a.amount, dueDate: a.dueDate, frequency: a.frequency, paidEarly: a.assignedPeriodIdx < a.deadlinePeriodIdx, autoPay: a.autoPay || false, paymentUrl: a.data?.payment_url || null };
+    const entry = { id: a.data?.id || null, name: a.name, amount: a.amount, dueDate: a.dueDate, frequency: a.frequency, paidEarly: a.assignedPeriodIdx < a.deadlinePeriodIdx, autoPay: a.autoPay || false, paymentUrl: a.data?.payment_url || null, isVariable: a.data?.is_variable ? true : false };
     if (a.type === 'bill') { p.bills.push(entry); p.totalBills += a.amount; }
     else { p.debts.push({ ...entry, remaining: a.remaining, interestRate: a.interestRate, debtId: a.debtId }); p.totalDebtMins += a.amount; }
   }
@@ -130,6 +130,17 @@ function balanceAllocations(items, periods, config) {
 // ════════════════════════════════════════════════════════════════════
 
 function computeSnowball(periods, debts, config) {
+  const db = getDb();
+
+  // Load all snowball overrides into a map
+  const snowballOverrides = {};
+  try {
+    const rows = db.prepare('SELECT * FROM period_snowball_overrides').all();
+    for (const r of rows) snowballOverrides[r.pay_date] = r;
+  } catch (e) {
+    // Table might not exist yet on first run
+  }
+
   const debtStates = debts
     .filter(d => d.is_active && d.remaining_amount > 0)
     .map(d => ({ id: d.id, name: d.name, originalBalance: d.remaining_amount, remaining: d.remaining_amount, minimumPayment: d.minimum_payment, interestRate: d.interest_rate, paidOff: false, payoffPeriod: null, payoffDate: null }))
@@ -151,6 +162,20 @@ function computeSnowball(periods, debts, config) {
     const minSpending = config.minimum_spending || 0;
     const payments = [];
     let extraPool = round2(Math.max(0, freeCash - minSpending));
+
+    // Apply snowball override for this period
+    const override = snowballOverrides[period.payDate];
+    let snowballSkipped = false;
+    let snowballCapped = false;
+    if (override && override.max_extra !== null && override.max_extra !== undefined) {
+      if (override.max_extra === 0) {
+        extraPool = 0;
+        snowballSkipped = true;
+      } else {
+        extraPool = round2(Math.min(extraPool, override.max_extra));
+        snowballCapped = true;
+      }
+    }
 
     for (const ds of debtStates) {
       if (ds.paidOff) continue;
@@ -183,7 +208,11 @@ function computeSnowball(periods, debts, config) {
       payDate: period.payDate, snowballPayments: payments, totalSnowball, snowballExtra,
       freeCash, minimumSpending: minSpending,
       remainingAfterSnowball: round2(config.amount - period.totalBills - period.transfer - totalSnowball),
-      snowballTarget: debtStates.find(d => !d.paidOff)?.name || null
+      snowballTarget: debtStates.find(d => !d.paidOff)?.name || null,
+      snowballSkipped,
+      snowballCapped,
+      snowballOverride: override ? override.max_extra : null,
+      snowballOverrideNotes: override?.notes || null
     });
   }
 

@@ -22,11 +22,11 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const db = getDb();
-    const { name, amount, category_id, due_day, frequency, payment_url } = req.body;
+    const { name, amount, category_id, due_day, frequency, payment_url, is_variable } = req.body;
     const id = uuidv4();
     db.prepare(
-      'INSERT INTO subscriptions (id, name, amount, category_id, due_day, frequency, payment_url) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, name, amount, category_id || null, due_day, frequency || 'monthly', payment_url || null);
+      'INSERT INTO subscriptions (id, name, amount, category_id, due_day, frequency, payment_url, is_variable) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, name, amount, category_id || null, due_day, frequency || 'monthly', payment_url || null, is_variable ? 1 : 0);
     const sub = db.prepare(`
       SELECT s.*, c.name as category_name, c.icon as category_icon, c.color as category_color
       FROM subscriptions s LEFT JOIN categories c ON s.category_id = c.id WHERE s.id = ?
@@ -41,10 +41,10 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const db = getDb();
-    const { name, amount, category_id, due_day, frequency, is_active, payment_url } = req.body;
+    const { name, amount, category_id, due_day, frequency, is_active, payment_url, is_variable } = req.body;
     db.prepare(
-      'UPDATE subscriptions SET name=?, amount=?, category_id=?, due_day=?, frequency=?, is_active=?, payment_url=? WHERE id=?'
-    ).run(name, amount, category_id || null, due_day, frequency, is_active ? 1 : 0, payment_url || null, req.params.id);
+      'UPDATE subscriptions SET name=?, amount=?, category_id=?, due_day=?, frequency=?, is_active=?, payment_url=?, is_variable=? WHERE id=?'
+    ).run(name, amount, category_id || null, due_day, frequency, is_active ? 1 : 0, payment_url || null, is_variable ? 1 : 0, req.params.id);
     const sub = db.prepare(`
       SELECT s.*, c.name as category_name, c.icon as category_icon, c.color as category_color
       FROM subscriptions s LEFT JOIN categories c ON s.category_id = c.id WHERE s.id = ?

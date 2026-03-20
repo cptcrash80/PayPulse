@@ -49,6 +49,7 @@ function initTables() {
       frequency TEXT DEFAULT 'monthly',
       is_active INTEGER DEFAULT 1,
       auto_pay INTEGER DEFAULT 0,
+      is_variable INTEGER DEFAULT 0,
       payment_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
@@ -62,6 +63,7 @@ function initTables() {
       due_day INTEGER NOT NULL,
       frequency TEXT DEFAULT 'monthly',
       is_active INTEGER DEFAULT 1,
+      is_variable INTEGER DEFAULT 0,
       payment_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
@@ -121,6 +123,24 @@ function initTables() {
       paid_at TEXT DEFAULT (datetime('now')),
       UNIQUE(pay_date, item_id, item_type)
     );
+
+    CREATE TABLE IF NOT EXISTS period_amount_overrides (
+      id TEXT PRIMARY KEY,
+      pay_date TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(pay_date, item_id, item_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS period_snowball_overrides (
+      id TEXT PRIMARY KEY,
+      pay_date TEXT NOT NULL UNIQUE,
+      max_extra REAL,
+      notes TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 }
 
@@ -162,6 +182,16 @@ function runMigrations() {
       name: 'add_payment_url_to_debts',
       check: () => !tableHasColumn(d, 'debts', 'payment_url'),
       run: () => d.exec("ALTER TABLE debts ADD COLUMN payment_url TEXT")
+    },
+    {
+      name: 'add_is_variable_to_recurring_bills',
+      check: () => !tableHasColumn(d, 'recurring_bills', 'is_variable'),
+      run: () => d.exec("ALTER TABLE recurring_bills ADD COLUMN is_variable INTEGER DEFAULT 0")
+    },
+    {
+      name: 'add_is_variable_to_subscriptions',
+      check: () => !tableHasColumn(d, 'subscriptions', 'is_variable'),
+      run: () => d.exec("ALTER TABLE subscriptions ADD COLUMN is_variable INTEGER DEFAULT 0")
     }
   ];
 

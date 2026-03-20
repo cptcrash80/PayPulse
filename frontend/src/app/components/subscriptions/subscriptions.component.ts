@@ -41,13 +41,16 @@ import { Category } from '../../models/models';
             <td style="font-weight: 500;">
               {{ sub.name }}
               <span class="tag" style="background: var(--info-dim); color: var(--info); margin-left: 6px; font-size: 0.7rem;">Auto-pay</span>
+              <span *ngIf="sub.is_variable" class="tag" style="background: var(--warning-dim); color: var(--warning); margin-left: 6px; font-size: 0.7rem;">Variable</span>
             </td>
             <td>
               <span class="tag" [style.background]="(sub.category_color || '#64748b') + '20'" [style.color]="sub.category_color || '#64748b'">
                 {{ sub.category_icon || '🔄' }} {{ sub.category_name || 'None' }}
               </span>
             </td>
-            <td class="money">{{ sub.amount | currency }}</td>
+            <td class="money">
+              <span *ngIf="sub.is_variable" class="text-warning">~</span>{{ sub.amount | currency }}
+            </td>
             <td>{{ getOrdinal(sub.due_day) }}</td>
             <td style="text-transform: capitalize;">{{ sub.frequency }}</td>
             <td>
@@ -103,6 +106,16 @@ import { Category } from '../../models/models';
           </div>
         </div>
 
+        <div class="form-group" style="margin-top: 4px;">
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; letter-spacing: normal; font-size: 0.9rem;">
+            <input type="checkbox" [(ngModel)]="form.is_variable" style="width: auto; cursor: pointer;">
+            Variable amount
+          </label>
+          <small style="color: var(--text-muted); font-size: 0.78rem; margin-top: 4px; display: block;">
+            Amount varies each billing cycle — enter actual amount on each pay period
+          </small>
+        </div>
+
         <div class="form-group">
           <label>Payment / Management URL (optional)</label>
           <input type="url" [(ngModel)]="form.payment_url" placeholder="https://...">
@@ -130,7 +143,7 @@ export class SubscriptionsComponent implements OnInit {
   showModal = false;
   editing: any = null;
   error = '';
-  form: any = { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', payment_url: '' };
+  form: any = { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', is_variable: false, payment_url: '' };
 
   get totalMonthly(): number {
     return this.subs.reduce((sum, s) => {
@@ -155,8 +168,8 @@ export class SubscriptionsComponent implements OnInit {
   openModal(sub?: any) {
     this.editing = sub || null;
     this.form = sub
-      ? { name: sub.name, amount: sub.amount, category_id: sub.category_id, due_day: sub.due_day, frequency: sub.frequency, payment_url: sub.payment_url || '' }
-      : { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', payment_url: '' };
+      ? { name: sub.name, amount: sub.amount, category_id: sub.category_id, due_day: sub.due_day, frequency: sub.frequency, is_variable: !!sub.is_variable, payment_url: sub.payment_url || '' }
+      : { name: '', amount: 0, category_id: null, due_day: 1, frequency: 'monthly', is_variable: false, payment_url: '' };
     this.showModal = true;
     this.error = '';
   }
@@ -176,6 +189,7 @@ export class SubscriptionsComponent implements OnInit {
       due_day: this.form.due_day,
       frequency: this.form.frequency || 'monthly',
       is_active: 1,
+      is_variable: this.form.is_variable ? 1 : 0,
       payment_url: this.form.payment_url || null
     };
     const obs = this.editing

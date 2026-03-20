@@ -118,4 +118,20 @@ export class ApiService {
   togglePaidItem(payDate: string, itemId: string, itemType: string): Observable<Record<string, boolean>> {
     return this.http.post<Record<string, boolean>>(`${this.base}/paid/${payDate}`, { item_id: itemId, item_type: itemType });
   }
+
+  // Period amount overrides (variable bills)
+  getAmountOverrides(payDate: string): Observable<Record<string, number>> {
+    return this.http.get<Record<string, number>>(`${this.base}/paid/${payDate}/overrides`);
+  }
+  setAmountOverride(payDate: string, itemId: string, itemType: string, amount: number): Observable<Record<string, number>> {
+    return this.http.post<Record<string, number>>(`${this.base}/paid/${payDate}/overrides`, { item_id: itemId, item_type: itemType, amount });
+  }
+
+  // Snowball overrides (skip/adjust per period)
+  getSnowballOverride(payDate: string): Observable<any> {
+    return this.http.get(`${this.base}/paid/${payDate}/snowball`);
+  }
+  setSnowballOverride(payDate: string, maxExtra: number | null, notes?: string): Observable<any> {
+    return this.http.post(`${this.base}/paid/${payDate}/snowball`, { max_extra: maxExtra, notes });
+  }
 }

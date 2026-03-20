@@ -82,8 +82,14 @@ import { ApiService } from '../../services/api.service';
           </div>
           <div *ngFor="let bill of data.billTotals" class="review-row">
             <div class="review-name">
-              <span>{{ bill.name }}</span>
-              <span class="review-count text-muted">{{ bill.count }} payments</span>
+              <span>
+                {{ bill.name }}
+                <span *ngIf="bill.isVariable" class="tag" style="background: var(--warning-dim); color: var(--warning); margin-left: 6px; font-size: 0.7rem;">Variable</span>
+              </span>
+              <span class="review-count text-muted">
+                {{ bill.count }} payments
+                <span *ngIf="bill.isVariable && bill.total !== bill.estimate"> · Est. {{ bill.estimate | currency }}</span>
+              </span>
             </div>
             <span class="money">{{ bill.total | currency }}</span>
           </div>

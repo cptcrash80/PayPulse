@@ -22,11 +22,11 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const db = getDb();
-    const { name, amount, category_id, due_day, frequency, auto_pay, payment_url } = req.body;
+    const { name, amount, category_id, due_day, frequency, auto_pay, payment_url, is_variable } = req.body;
     const id = uuidv4();
     db.prepare(
-      'INSERT INTO recurring_bills (id, name, amount, category_id, due_day, frequency, auto_pay, payment_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, name, amount, category_id || null, due_day, frequency || 'monthly', auto_pay ? 1 : 0, payment_url || null);
+      'INSERT INTO recurring_bills (id, name, amount, category_id, due_day, frequency, auto_pay, payment_url, is_variable) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, name, amount, category_id || null, due_day, frequency || 'monthly', auto_pay ? 1 : 0, payment_url || null, is_variable ? 1 : 0);
     const bill = db.prepare(`
       SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color
       FROM recurring_bills b LEFT JOIN categories c ON b.category_id = c.id WHERE b.id = ?
@@ -41,10 +41,10 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const db = getDb();
-    const { name, amount, category_id, due_day, frequency, is_active, auto_pay, payment_url } = req.body;
+    const { name, amount, category_id, due_day, frequency, is_active, auto_pay, payment_url, is_variable } = req.body;
     db.prepare(
-      'UPDATE recurring_bills SET name=?, amount=?, category_id=?, due_day=?, frequency=?, is_active=?, auto_pay=?, payment_url=? WHERE id=?'
-    ).run(name, amount, category_id || null, due_day, frequency, is_active ? 1 : 0, auto_pay ? 1 : 0, payment_url || null, req.params.id);
+      'UPDATE recurring_bills SET name=?, amount=?, category_id=?, due_day=?, frequency=?, is_active=?, auto_pay=?, payment_url=?, is_variable=? WHERE id=?'
+    ).run(name, amount, category_id || null, due_day, frequency, is_active ? 1 : 0, auto_pay ? 1 : 0, payment_url || null, is_variable ? 1 : 0, req.params.id);
     const bill = db.prepare(`
       SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color
       FROM recurring_bills b LEFT JOIN categories c ON b.category_id = c.id WHERE b.id = ?

@@ -179,19 +179,29 @@ import { DashboardData } from '../../models/models';
             </div>
           </div>
 
-          <!-- Per-period snowball breakdown -->
+          <!-- Per-period snowball summary -->
           <div *ngIf="data.periodBreakdowns?.length" class="snowball-periods">
-            <div class="snowball-periods-title text-muted">Per-Paycheck Snowball Payments</div>
-            <div *ngFor="let period of data.periodBreakdowns" class="snowball-period-row">
-              <span>{{ period.payDate | date:'MMM d' }}</span>
-              <div class="snowball-payments-mini">
-                <span *ngFor="let p of period.snowball?.snowballPayments" class="snowball-chip" [class.has-extra]="p.extra > 0">
-                  {{ p.debtName }}: {{ p.total | currency }}
-                  <span *ngIf="p.extra > 0" class="extra-label">(+{{ p.extra | currency }})</span>
-                </span>
-                <span *ngIf="!period.snowball?.snowballPayments?.length" class="text-muted" style="font-size: 0.78rem;">—</span>
-              </div>
-            </div>
+            <div class="snowball-periods-title text-muted">Per-Paycheck Summary</div>
+            <table class="snowball-table">
+              <thead>
+                <tr>
+                  <th>Pay Date</th>
+                  <th>Target</th>
+                  <th style="text-align:right;">Minimums</th>
+                  <th style="text-align:right;">Extra</th>
+                  <th style="text-align:right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let period of data.periodBreakdowns" class="snowball-table-row">
+                  <td><a [routerLink]="['/period', period.payDate]" class="snowball-date-link">{{ period.payDate | date:'MMM d' }}</a></td>
+                  <td class="snowball-target-cell">{{ period.snowball?.snowballTarget || '—' }}</td>
+                  <td class="money" style="text-align:right;">{{ getSnowballMins(period) | currency }}</td>
+                  <td class="money text-accent" style="text-align:right;">{{ period.snowball?.snowballExtra > 0 ? '+' : '' }}{{ period.snowball?.snowballExtra || 0 | currency }}</td>
+                  <td class="money" style="text-align:right; font-weight: 600;">{{ period.snowball?.totalSnowball || 0 | currency }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -436,34 +446,38 @@ import { DashboardData } from '../../models/models';
       letter-spacing: 0.06em;
       margin-bottom: 10px;
     }
-    .snowball-period-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      padding: 6px 0;
-      font-size: 0.85rem;
-      gap: 12px;
+    .snowball-table {
+      width: 100%;
+      border-collapse: collapse;
     }
-    .snowball-payments-mini {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      justify-content: flex-end;
-    }
-    .snowball-chip {
-      font-size: 0.78rem;
-      background: var(--bg-tertiary);
-      padding: 2px 8px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-    }
-    .snowball-chip.has-extra {
-      border-color: var(--accent);
-      background: var(--accent-dim);
-    }
-    .extra-label {
-      color: var(--accent);
+    .snowball-table th {
+      text-align: left;
+      font-size: 0.7rem;
       font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .snowball-table td {
+      padding: 8px;
+      font-size: 0.82rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .snowball-table tr:last-child td { border-bottom: none; }
+    .snowball-date-link {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+    .snowball-date-link:hover { color: var(--accent); opacity: 1; }
+    .snowball-target-cell {
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   `]
 })
@@ -722,5 +736,10 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   getSnowballPercent(debt: any): number {
     if (!debt.totalAmount || debt.totalAmount <= 0) return 0;
     return Math.max(0, Math.min(100, ((debt.totalAmount - debt.currentRemaining) / debt.totalAmount) * 100));
+  }
+
+  getSnowballMins(period: any): number {
+    if (!period.snowball?.snowballPayments) return 0;
+    return period.snowball.snowballPayments.reduce((s: number, p: any) => s + p.minimum, 0);
   }
 }
