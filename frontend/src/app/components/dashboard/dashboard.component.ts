@@ -126,12 +126,12 @@ import { DashboardData } from '../../models/models';
               <span class="text-muted" style="font-size:0.78rem;">Min spending floor</span>
               <span class="money text-muted" style="font-size:0.82rem;">{{ period.snowball.minimumSpending | currency }}</span>
             </div>
-            <div class="period-items" *ngIf="period.bills.length > 0 || period.debts.length > 0">
+            <div class="period-items" *ngIf="period.bills.length > 0 || getDebtDisplayItems(period).length > 0">
               <div *ngFor="let bill of period.bills" class="period-line-item" [class.early]="bill.paidEarly">
                 <span>📋 {{ bill.name }}<span *ngIf="bill.paidEarly" class="early-badge">early</span></span>
                 <span class="money">{{ bill.amount | currency }}</span>
               </div>
-              <div *ngFor="let debt of period.debts" class="period-line-item debt-item" [class.early]="debt.paidEarly">
+              <div *ngFor="let debt of getDebtDisplayItems(period)" class="period-line-item debt-item" [class.early]="debt.paidEarly">
                 <span>🏦 {{ debt.name }}<span *ngIf="debt.paidEarly" class="early-badge">early</span></span>
                 <span class="money">{{ debt.amount | currency }}</span>
               </div>
@@ -717,5 +717,29 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   getSnowballPercent(debt: any): number {
     if (!debt.totalAmount || debt.totalAmount <= 0) return 0;
     return Math.max(0, Math.min(100, ((debt.totalAmount - debt.currentRemaining) / debt.totalAmount) * 100));
+  }
+
+  getDebtDisplayItems(period: any): any[] {
+    const debts: any[] = period.debts || [];
+    const snowballPayments: any[] = period.snowball?.snowballPayments || [];
+    const snowballMap = new Map<number, any>(snowballPayments.map((sp: any) => [sp.debtId, sp]));
+
+    const shownIds = new Set<number>();
+    const result: any[] = [];
+
+    for (const d of debts) {
+      const sp = snowballMap.get(d.debtId);
+      shownIds.add(d.debtId);
+      result.push({ name: d.name, amount: sp ? sp.total : d.amount, paidEarly: d.paidEarly });
+    }
+
+    // Debts that receive snowball extra this period but have no minimum allocation here
+    for (const sp of snowballPayments) {
+      if (!shownIds.has(sp.debtId) && sp.extra > 0) {
+        result.push({ name: sp.debtName, amount: sp.total, paidEarly: false });
+      }
+    }
+
+    return result;
   }
 }
