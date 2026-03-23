@@ -393,7 +393,10 @@ function runFullSnowball(config, bills, debts, periodCount, pastCount) {
     p.totalDebtMins = round2(p.totalDebtMins);
   }
 
-  const snowball = computeSnowball(balanced, debts, config);
+  // Snowball simulation must start from the current period with actual debt balances.
+  // Past periods (pastCount) are included for display/balancing only — running the
+  // snowball through them would use simulated (not actual) balances for future periods.
+  const snowball = computeSnowball(balanced.slice(pastCount || 0), debts, config);
   return { balancedPeriods: balanced, snowball };
 }
 
