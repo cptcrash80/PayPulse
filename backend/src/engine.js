@@ -11,20 +11,34 @@ function getMonthsInRange(start, end) {
   return months;
 }
 
-function calculatePayDates(startDate, count) {
+function calculatePayDates(startDate, count, pastCount) {
+  pastCount = pastCount || 0;
   const dates = [], start = new Date(startDate);
   const today = new Date().toISOString().split('T')[0];
   let current = new Date(start);
   // Advance until current is on or after today
   while (current.toISOString().split('T')[0] < today) current.setDate(current.getDate() + 14);
-  let d = new Date(current);
-  for (let i = 0; i < count; i++) { dates.push(d.toISOString().split('T')[0]); d = new Date(d); d.setDate(d.getDate() + 14); }
+  // Walk backwards for past periods
+  let pastStart = new Date(current);
+  for (let i = 0; i < pastCount; i++) {
+    pastStart.setDate(pastStart.getDate() - 14);
+  }
+  let d = new Date(pastStart);
+  for (let i = 0; i < count + pastCount; i++) { dates.push(d.toISOString().split('T')[0]); d = new Date(d); d.setDate(d.getDate() + 14); }
   return dates;
 }
 
 function getCurrentPayPeriod(payDates) {
   if (payDates.length < 2) return { start: payDates[0], end: payDates[0] };
-  return { start: payDates[0], end: payDates[1] };
+  const today = new Date().toISOString().split('T')[0];
+  // Find the period where today falls between payDate[i] and payDate[i+1]
+  for (let i = 0; i < payDates.length - 1; i++) {
+    if (today >= payDates[i] && today < payDates[i + 1]) {
+      return { start: payDates[i], end: payDates[i + 1] };
+    }
+  }
+  // Fallback: if today is on/after the last date, use the last date
+  return { start: payDates[payDates.length - 1], end: payDates[payDates.length - 1] };
 }
 
 function buildPeriodShells(payDates, config) {
@@ -149,8 +163,19 @@ function computeSnowball(periods, debts, config) {
   const periodAllocations = [];
   const paidOffIds = new Set();
 
+  // Find the current period index — snowball extra only applies from here onward
+  const today = new Date().toISOString().split('T')[0];
+  let currentPeriodIdx = 0;
+  for (let i = 0; i < periods.length; i++) {
+    if (periods[i].payDate <= today && (i === periods.length - 1 || periods[i + 1].payDate > today)) {
+      currentPeriodIdx = i;
+      break;
+    }
+  }
+
   for (let pi = 0; pi < periods.length; pi++) {
     const period = periods[pi];
+    const isPastPeriod = pi < currentPeriodIdx;
     let freeCash = config.amount - period.totalBills - period.transfer;
     let activeMinimums = 0;
     for (const pd of period.debts) {
@@ -161,7 +186,8 @@ function computeSnowball(periods, debts, config) {
 
     const minSpending = config.minimum_spending || 0;
     const payments = [];
-    let extraPool = round2(Math.max(0, freeCash - minSpending));
+    // No snowball extra for past periods — those are historical
+    let extraPool = isPastPeriod ? 0 : round2(Math.max(0, freeCash - minSpending));
 
     // Apply snowball override for this period
     const override = snowballOverrides[period.payDate];
@@ -342,8 +368,8 @@ function projectSnowballPayoff(balancedPeriods, debts, config) {
 /**
  * Run balance + short-term snowball over periodCount periods.
  */
-function runFullSnowball(config, bills, debts, periodCount) {
-  const payDates = calculatePayDates(config.start_date, periodCount);
+function runFullSnowball(config, bills, debts, periodCount, pastCount) {
+  const payDates = calculatePayDates(config.start_date, periodCount, pastCount || 0);
   const shells = buildPeriodShells(payDates, config);
   const obligations = generateObligations(bills, debts, shells);
   const balanced = balanceAllocations(obligations, shells, config);

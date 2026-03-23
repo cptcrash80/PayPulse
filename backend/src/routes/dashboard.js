@@ -17,8 +17,8 @@ router.get('/', (req, res) => {
     'SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM expenses e LEFT JOIN categories c ON e.category_id = c.id WHERE e.date >= ? ORDER BY e.date DESC'
   ).all(thirtyDaysAgo.toISOString().split('T')[0]);
 
-  // 6 periods for display
-  const { balancedPeriods, snowball } = runFullSnowball(config, bills, debts, 6);
+  // 4 future periods + 1 past for display
+  const { balancedPeriods, snowball } = runFullSnowball(config, bills, debts, 4, 1);
 
   // Long-term projection for payoff dates (uses avg free cash, not individual periods)
   const longSnowball = projectSnowballPayoff(balancedPeriods, debts, config);
@@ -35,6 +35,28 @@ router.get('/', (req, res) => {
     p.totalSnowball = sa ? sa.totalSnowball : p.totalDebtMins;
     p.committed = round2(p.totalBills + (sa ? sa.totalSnowball : p.totalDebtMins) + p.transfer);
     p.available = round2(config.amount - p.committed);
+
+    // Add snowball-only debts (debts receiving extra but not allocated a minimum this period)
+    if (sa?.snowballPayments) {
+      for (const sp of sa.snowballPayments) {
+        const alreadyListed = p.debts.find(d => d.debtId === sp.debtId || d.name === sp.debtName);
+        if (!alreadyListed && sp.total > 0) {
+          p.debts.push({
+            name: sp.debtName,
+            debtId: sp.debtId,
+            amount: sp.total,
+            dueDate: null,
+            frequency: 'snowball',
+            paidEarly: false,
+            autoPay: false,
+            snowballOnly: true
+          });
+        } else if (alreadyListed) {
+          // Update amount to include snowball extra
+          alreadyListed.amount = sp.total;
+        }
+      }
+    }
   }
 
   // Aggregates
@@ -144,13 +166,20 @@ router.get('/period/:payDate', (req, res) => {
   const bills = getBillsWithSubscriptions();
   const debts = db.prepare('SELECT * FROM debts WHERE is_active = 1').all();
 
-  const { balancedPeriods: balanced, snowball } = runFullSnowball(config, bills, debts, 26);
+  const { balancedPeriods: balanced, snowball } = runFullSnowball(config, bills, debts, 26, 6);
   const payDates = balanced.map(p => p.payDate);
   const idx = payDates.indexOf(payDate);
   if (idx === -1) return res.status(404).json({ error: 'Pay date not found in schedule' });
 
   const period = balanced[idx];
-  const periodSnowball = snowball.periodAllocations[idx] || null;
+  const periodSnowball = snowball.periodAllocations.find(sa => sa.payDate === payDate) || null;
+
+  console.log(`Period detail ${payDate}: idx=${idx}, snowball found=${!!periodSnowball}, snowball payments=${periodSnowball?.snowballPayments?.length || 0}, period.debts=${period.debts.length}`);
+  if (periodSnowball?.snowballPayments) {
+    for (const sp of periodSnowball.snowballPayments) {
+      console.log(`  Snowball payment: ${sp.debtName} min=${sp.minimum} extra=${sp.extra} total=${sp.total}`);
+    }
+  }
 
   const periodExpenses = db.prepare(
     'SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM expenses e LEFT JOIN categories c ON e.category_id = c.id WHERE e.date >= ? AND e.date < ? ORDER BY e.date DESC'

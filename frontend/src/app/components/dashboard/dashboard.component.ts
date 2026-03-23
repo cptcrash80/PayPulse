@@ -110,13 +110,14 @@ import { DashboardData } from '../../models/models';
       <!-- Pay period breakdown -->
       <div class="card" style="margin-bottom: 24px;">
         <div class="card-header">
-          <span class="card-title">Upcoming Pay Period Allocations</span>
-          <span class="tag" style="background: var(--accent-dim); color: var(--accent);">Balanced</span>
+          <span class="card-title">Pay Period Allocations</span>
+          <a routerLink="/paychecks" class="btn-sm btn-secondary">All Paychecks →</a>
         </div>
         <div class="period-grid">
-          <a *ngFor="let period of data.periodBreakdowns?.slice(0, 4)" class="period-card" [class.current]="isCurrentPeriod(period.payDate)" [routerLink]="['/period', period.payDate]">
+          <a *ngFor="let period of dashboardPeriods" class="period-card" [class.current]="isCurrentPeriod(period.payDate)" [class.past]="isPastPeriod(period.payDate)" [routerLink]="['/period', period.payDate]">
             <div class="period-date">
               <span class="period-label" *ngIf="isCurrentPeriod(period.payDate)">Current</span>
+              <span class="period-label past-label" *ngIf="isPastPeriod(period.payDate)">Past</span>
               {{ period.payDate | date:'MMM d' }}
             </div>
             <div class="period-detail">
@@ -153,7 +154,7 @@ import { DashboardData } from '../../models/models';
                 <span class="money">{{ bill.amount | currency }}</span>
               </div>
               <div *ngFor="let debt of period.debts" class="period-line-item debt-item" [class.early]="debt.paidEarly">
-                <span>🏦 {{ debt.name }}<span *ngIf="debt.paidEarly" class="early-badge">early</span><span *ngIf="debt.autoPay" class="auto-badge">🔒</span></span>
+                <span>🏦 {{ debt.name }}<span *ngIf="debt.paidEarly" class="early-badge">early</span><span *ngIf="debt.autoPay" class="auto-badge">🔒</span><span *ngIf="debt.snowballOnly" class="early-badge" style="background: var(--accent-dim); color: var(--accent);">⛄</span></span>
                 <span class="money">{{ debt.amount | currency }}</span>
               </div>
             </div>
@@ -272,7 +273,7 @@ import { DashboardData } from '../../models/models';
     }
     .period-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 12px;
     }
     @media (max-width: 1024px) { .period-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -337,6 +338,13 @@ import { DashboardData } from '../../models/models';
       border-radius: 10px;
       font-weight: 600;
     }
+    .period-label.past-label {
+      background: var(--text-muted);
+    }
+    .period-card.past {
+      opacity: 0.55;
+    }
+    .period-card.past:hover { opacity: 0.85; }
     .period-detail {
       display: flex;
       justify-content: space-between;
@@ -777,6 +785,22 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   isCurrentPeriod(payDate: string): boolean {
     if (!this.data?.currentPeriod) return false;
     return payDate === this.data.currentPeriod.start;
+  }
+
+  isPastPeriod(payDate: string): boolean {
+    if (!this.data?.currentPeriod) return false;
+    return payDate < this.data.currentPeriod.start;
+  }
+
+  get dashboardPeriods(): any[] {
+    if (!this.data?.periodBreakdowns || !this.data?.currentPeriod) return this.data?.periodBreakdowns || [];
+    const all = this.data.periodBreakdowns;
+    const currentStart = this.data.currentPeriod.start;
+    const currentIdx = all.findIndex((p: any) => p.payDate === currentStart);
+    if (currentIdx === -1) return all.slice(0, 3);
+    const start = Math.max(0, currentIdx - 1);
+    const end = Math.min(all.length, currentIdx + 2); // current + 1 future
+    return all.slice(start, end);
   }
 
   getSnowballPercent(debt: any): number {
