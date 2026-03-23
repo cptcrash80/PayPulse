@@ -48,6 +48,23 @@ function initTables() {
       due_day INTEGER NOT NULL,
       frequency TEXT DEFAULT 'monthly',
       is_active INTEGER DEFAULT 1,
+      auto_pay INTEGER DEFAULT 0,
+      is_variable INTEGER DEFAULT 0,
+      payment_url TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      amount REAL NOT NULL,
+      category_id TEXT,
+      due_day INTEGER NOT NULL,
+      frequency TEXT DEFAULT 'monthly',
+      is_active INTEGER DEFAULT 1,
+      is_variable INTEGER DEFAULT 0,
+      payment_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
     );
@@ -73,6 +90,8 @@ function initTables() {
       due_day INTEGER,
       priority INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1,
+      auto_pay INTEGER DEFAULT 0,
+      payment_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -95,6 +114,33 @@ function initTables() {
       type TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS period_paid_items (
+      id TEXT PRIMARY KEY,
+      pay_date TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      paid_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(pay_date, item_id, item_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS period_amount_overrides (
+      id TEXT PRIMARY KEY,
+      pay_date TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(pay_date, item_id, item_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS period_snowball_overrides (
+      id TEXT PRIMARY KEY,
+      pay_date TEXT NOT NULL UNIQUE,
+      max_extra REAL,
+      notes TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 }
 
@@ -111,13 +157,42 @@ function runMigrations() {
       name: 'add_minimum_spending_to_paycheck_config',
       check: () => !tableHasColumn(d, 'paycheck_config', 'minimum_spending'),
       run: () => d.exec("ALTER TABLE paycheck_config ADD COLUMN minimum_spending REAL NOT NULL DEFAULT 0")
+    },
+    {
+      name: 'add_auto_pay_to_recurring_bills',
+      check: () => !tableHasColumn(d, 'recurring_bills', 'auto_pay'),
+      run: () => d.exec("ALTER TABLE recurring_bills ADD COLUMN auto_pay INTEGER DEFAULT 0")
+    },
+    {
+      name: 'add_auto_pay_to_debts',
+      check: () => !tableHasColumn(d, 'debts', 'auto_pay'),
+      run: () => d.exec("ALTER TABLE debts ADD COLUMN auto_pay INTEGER DEFAULT 0")
+    },
+    {
+      name: 'add_payment_url_to_recurring_bills',
+      check: () => !tableHasColumn(d, 'recurring_bills', 'payment_url'),
+      run: () => d.exec("ALTER TABLE recurring_bills ADD COLUMN payment_url TEXT")
+    },
+    {
+      name: 'add_payment_url_to_subscriptions',
+      check: () => !tableHasColumn(d, 'subscriptions', 'payment_url'),
+      run: () => d.exec("ALTER TABLE subscriptions ADD COLUMN payment_url TEXT")
+    },
+    {
+      name: 'add_payment_url_to_debts',
+      check: () => !tableHasColumn(d, 'debts', 'payment_url'),
+      run: () => d.exec("ALTER TABLE debts ADD COLUMN payment_url TEXT")
+    },
+    {
+      name: 'add_is_variable_to_recurring_bills',
+      check: () => !tableHasColumn(d, 'recurring_bills', 'is_variable'),
+      run: () => d.exec("ALTER TABLE recurring_bills ADD COLUMN is_variable INTEGER DEFAULT 0")
+    },
+    {
+      name: 'add_is_variable_to_subscriptions',
+      check: () => !tableHasColumn(d, 'subscriptions', 'is_variable'),
+      run: () => d.exec("ALTER TABLE subscriptions ADD COLUMN is_variable INTEGER DEFAULT 0")
     }
-    // Future migrations go here:
-    // {
-    //   name: 'add_some_column_to_some_table',
-    //   check: () => !tableHasColumn(d, 'some_table', 'some_column'),
-    //   run: () => d.exec("ALTER TABLE some_table ADD COLUMN some_column TEXT DEFAULT ''")
-    // }
   ];
 
   for (const m of migrations) {

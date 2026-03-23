@@ -48,6 +48,27 @@ import { DashboardData } from '../../models/models';
         </div>
       </div>
 
+      <!-- Upcoming bills banner -->
+      <div *ngIf="data.upcomingBills?.length" class="upcoming-banner card" style="margin-bottom: 24px;">
+        <div class="upcoming-header">
+          <span class="upcoming-icon">⏰</span>
+          <span class="upcoming-title">{{ data.upcomingBills.length }} bill{{ data.upcomingBills.length > 1 ? 's' : '' }} due in the next 5 days</span>
+        </div>
+        <div class="upcoming-items">
+          <div *ngFor="let bill of data.upcomingBills" class="upcoming-item">
+            <div class="upcoming-item-left">
+              <span class="upcoming-name">{{ bill.name }}</span>
+              <span class="upcoming-due text-muted">{{ bill.daysUntil === 0 ? 'Due today' : bill.daysUntil === 1 ? 'Due tomorrow' : 'Due in ' + bill.daysUntil + ' days' }}</span>
+            </div>
+            <div class="upcoming-item-right">
+              <span *ngIf="bill.autoPay" class="tag" style="background: var(--info-dim); color: var(--info); font-size: 0.7rem;">Auto</span>
+              <span *ngIf="bill.isVariable" class="text-warning">~</span>
+              <span class="money">{{ bill.amount | currency }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Charts row -->
       <div class="grid-3" style="margin-bottom: 24px;">
         <!-- Spending trend -->
@@ -89,13 +110,14 @@ import { DashboardData } from '../../models/models';
       <!-- Pay period breakdown -->
       <div class="card" style="margin-bottom: 24px;">
         <div class="card-header">
-          <span class="card-title">Upcoming Pay Period Allocations</span>
-          <span class="tag" style="background: var(--accent-dim); color: var(--accent);">Balanced</span>
+          <span class="card-title">Pay Period Allocations</span>
+          <a routerLink="/paychecks" class="btn-sm btn-secondary">All Paychecks →</a>
         </div>
         <div class="period-grid">
-          <a *ngFor="let period of data.periodBreakdowns?.slice(0, 4)" class="period-card" [class.current]="isCurrentPeriod(period.payDate)" [routerLink]="['/period', period.payDate]">
+          <a *ngFor="let period of dashboardPeriods" class="period-card" [class.current]="isCurrentPeriod(period.payDate)" [class.past]="isPastPeriod(period.payDate)" [routerLink]="['/period', period.payDate]">
             <div class="period-date">
               <span class="period-label" *ngIf="isCurrentPeriod(period.payDate)">Current</span>
+              <span class="period-label past-label" *ngIf="isPastPeriod(period.payDate)">Past</span>
               {{ period.payDate | date:'MMM d' }}
             </div>
             <div class="period-detail">
@@ -126,13 +148,13 @@ import { DashboardData } from '../../models/models';
               <span class="text-muted" style="font-size:0.78rem;">Min spending floor</span>
               <span class="money text-muted" style="font-size:0.82rem;">{{ period.snowball.minimumSpending | currency }}</span>
             </div>
-            <div class="period-items" *ngIf="period.bills.length > 0 || getDebtDisplayItems(period).length > 0">
+            <div class="period-items" *ngIf="period.bills.length > 0 || period.debts.length > 0">
               <div *ngFor="let bill of period.bills" class="period-line-item" [class.early]="bill.paidEarly">
-                <span>📋 {{ bill.name }}<span *ngIf="bill.paidEarly" class="early-badge">early</span></span>
+                <span>📋 {{ bill.name }}<span *ngIf="bill.paidEarly" class="early-badge">early</span><span *ngIf="bill.autoPay" class="auto-badge">🔒</span></span>
                 <span class="money">{{ bill.amount | currency }}</span>
               </div>
-              <div *ngFor="let debt of getDebtDisplayItems(period)" class="period-line-item debt-item" [class.early]="debt.paidEarly">
-                <span>🏦 {{ debt.name }}<span *ngIf="debt.paidEarly" class="early-badge">early</span></span>
+              <div *ngFor="let debt of period.debts" class="period-line-item debt-item" [class.early]="debt.paidEarly">
+                <span>🏦 {{ debt.name }}<span *ngIf="debt.paidEarly" class="early-badge">early</span><span *ngIf="debt.autoPay" class="auto-badge">🔒</span><span *ngIf="debt.snowballOnly" class="early-badge" style="background: var(--accent-dim); color: var(--accent);">⛄</span></span>
                 <span class="money">{{ debt.amount | currency }}</span>
               </div>
             </div>
@@ -179,19 +201,29 @@ import { DashboardData } from '../../models/models';
             </div>
           </div>
 
-          <!-- Per-period snowball breakdown -->
+          <!-- Per-period snowball summary -->
           <div *ngIf="data.periodBreakdowns?.length" class="snowball-periods">
-            <div class="snowball-periods-title text-muted">Per-Paycheck Snowball Payments</div>
-            <div *ngFor="let period of data.periodBreakdowns" class="snowball-period-row">
-              <span>{{ period.payDate | date:'MMM d' }}</span>
-              <div class="snowball-payments-mini">
-                <span *ngFor="let p of period.snowball?.snowballPayments" class="snowball-chip" [class.has-extra]="p.extra > 0">
-                  {{ p.debtName }}: {{ p.total | currency }}
-                  <span *ngIf="p.extra > 0" class="extra-label">(+{{ p.extra | currency }})</span>
-                </span>
-                <span *ngIf="!period.snowball?.snowballPayments?.length" class="text-muted" style="font-size: 0.78rem;">—</span>
-              </div>
-            </div>
+            <div class="snowball-periods-title text-muted">Per-Paycheck Summary</div>
+            <table class="snowball-table">
+              <thead>
+                <tr>
+                  <th>Pay Date</th>
+                  <th>Target</th>
+                  <th style="text-align:right;">Minimums</th>
+                  <th style="text-align:right;">Extra</th>
+                  <th style="text-align:right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let period of data.periodBreakdowns" class="snowball-table-row">
+                  <td><a [routerLink]="['/period', period.payDate]" class="snowball-date-link">{{ period.payDate | date:'MMM d' }}</a></td>
+                  <td class="snowball-target-cell">{{ period.snowball?.snowballTarget || '—' }}</td>
+                  <td class="money" style="text-align:right;">{{ getSnowballMins(period) | currency }}</td>
+                  <td class="money text-accent" style="text-align:right;">{{ period.snowball?.snowballExtra > 0 ? '+' : '' }}{{ period.snowball?.snowballExtra || 0 | currency }}</td>
+                  <td class="money" style="text-align:right; font-weight: 600;">{{ period.snowball?.totalSnowball || 0 | currency }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -241,7 +273,7 @@ import { DashboardData } from '../../models/models';
     }
     .period-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 12px;
     }
     @media (max-width: 1024px) { .period-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -265,6 +297,31 @@ import { DashboardData } from '../../models/models';
       border-color: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-dim);
     }
+    .upcoming-banner {
+      background: var(--bg-secondary);
+      border-left: 4px solid var(--warning);
+    }
+    .upcoming-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .upcoming-icon { font-size: 1.2rem; }
+    .upcoming-title { font-weight: 600; font-size: 0.95rem; }
+    .upcoming-items { display: flex; flex-direction: column; gap: 8px; }
+    .upcoming-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-sm);
+    }
+    .upcoming-item-left { display: flex; flex-direction: column; gap: 2px; }
+    .upcoming-name { font-weight: 500; font-size: 0.88rem; }
+    .upcoming-due { font-size: 0.78rem; }
+    .upcoming-item-right { display: flex; align-items: center; gap: 8px; }
     .period-date {
       font-weight: 700;
       font-size: 1.05rem;
@@ -281,6 +338,13 @@ import { DashboardData } from '../../models/models';
       border-radius: 10px;
       font-weight: 600;
     }
+    .period-label.past-label {
+      background: var(--text-muted);
+    }
+    .period-card.past {
+      opacity: 0.55;
+    }
+    .period-card.past:hover { opacity: 0.85; }
     .period-detail {
       display: flex;
       justify-content: space-between;
@@ -322,6 +386,11 @@ import { DashboardData } from '../../models/models';
       margin-left: 6px;
       font-style: normal;
       font-weight: 600;
+      vertical-align: middle;
+    }
+    .auto-badge {
+      margin-left: 4px;
+      font-size: 0.65rem;
       vertical-align: middle;
     }
     .period-view-link {
@@ -431,34 +500,38 @@ import { DashboardData } from '../../models/models';
       letter-spacing: 0.06em;
       margin-bottom: 10px;
     }
-    .snowball-period-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      padding: 6px 0;
-      font-size: 0.85rem;
-      gap: 12px;
+    .snowball-table {
+      width: 100%;
+      border-collapse: collapse;
     }
-    .snowball-payments-mini {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      justify-content: flex-end;
-    }
-    .snowball-chip {
-      font-size: 0.78rem;
-      background: var(--bg-tertiary);
-      padding: 2px 8px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-    }
-    .snowball-chip.has-extra {
-      border-color: var(--accent);
-      background: var(--accent-dim);
-    }
-    .extra-label {
-      color: var(--accent);
+    .snowball-table th {
+      text-align: left;
+      font-size: 0.7rem;
       font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .snowball-table td {
+      padding: 8px;
+      font-size: 0.82rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .snowball-table tr:last-child td { border-bottom: none; }
+    .snowball-date-link {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+    .snowball-date-link:hover { color: var(--accent); opacity: 1; }
+    .snowball-target-cell {
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   `]
 })
@@ -714,32 +787,29 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     return payDate === this.data.currentPeriod.start;
   }
 
+  isPastPeriod(payDate: string): boolean {
+    if (!this.data?.currentPeriod) return false;
+    return payDate < this.data.currentPeriod.start;
+  }
+
+  get dashboardPeriods(): any[] {
+    if (!this.data?.periodBreakdowns || !this.data?.currentPeriod) return this.data?.periodBreakdowns || [];
+    const all = this.data.periodBreakdowns;
+    const currentStart = this.data.currentPeriod.start;
+    const currentIdx = all.findIndex((p: any) => p.payDate === currentStart);
+    if (currentIdx === -1) return all.slice(0, 3);
+    const start = Math.max(0, currentIdx - 1);
+    const end = Math.min(all.length, currentIdx + 2); // current + 1 future
+    return all.slice(start, end);
+  }
+
   getSnowballPercent(debt: any): number {
     if (!debt.totalAmount || debt.totalAmount <= 0) return 0;
     return Math.max(0, Math.min(100, ((debt.totalAmount - debt.currentRemaining) / debt.totalAmount) * 100));
   }
 
-  getDebtDisplayItems(period: any): any[] {
-    const debts: any[] = period.debts || [];
-    const snowballPayments: any[] = period.snowball?.snowballPayments || [];
-    const snowballMap = new Map<number, any>(snowballPayments.map((sp: any) => [sp.debtId, sp]));
-
-    const shownIds = new Set<number>();
-    const result: any[] = [];
-
-    for (const d of debts) {
-      const sp = snowballMap.get(d.debtId);
-      shownIds.add(d.debtId);
-      result.push({ name: d.name, amount: sp ? sp.total : d.amount, paidEarly: d.paidEarly });
-    }
-
-    // Debts that receive snowball extra this period but have no minimum allocation here
-    for (const sp of snowballPayments) {
-      if (!shownIds.has(sp.debtId) && sp.extra > 0) {
-        result.push({ name: sp.debtName, amount: sp.total, paidEarly: false });
-      }
-    }
-
-    return result;
+  getSnowballMins(period: any): number {
+    if (!period.snowball?.snowballPayments) return 0;
+    return period.snowball.snowballPayments.reduce((s: number, p: any) => s + p.minimum, 0);
   }
 }

@@ -2,14 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../database');
 const { round2, calculatePayDates, getCurrentPayPeriod, buildPeriodShells,
-        generateObligations, balanceAllocations, computeSnowball, runFullSnowball, projectSnowballPayoff } = require('../engine');
+        generateObligations, balanceAllocations, computeSnowball, runFullSnowball, projectSnowballPayoff, getBillsWithSubscriptions } = require('../engine');
 
 router.get('/', (req, res) => {
   const db = getDb();
   const config = db.prepare('SELECT * FROM paycheck_config ORDER BY created_at DESC LIMIT 1').get();
   if (!config) return res.json({ configured: false, message: 'Please set up your paycheck first' });
 
-  const bills = db.prepare('SELECT * FROM recurring_bills WHERE is_active = 1').all();
+  const bills = getBillsWithSubscriptions();
   const debts = db.prepare('SELECT * FROM debts WHERE is_active = 1').all();
   const now = new Date();
   const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -35,6 +35,28 @@ router.get('/', (req, res) => {
     p.totalSnowball = sa ? sa.totalSnowball : p.totalDebtMins;
     p.committed = round2(p.totalBills + (sa ? sa.totalSnowball : p.totalDebtMins) + p.transfer);
     p.available = round2(config.amount - p.committed);
+
+    // Add snowball-only debts (debts receiving extra but not allocated a minimum this period)
+    if (sa?.snowballPayments) {
+      for (const sp of sa.snowballPayments) {
+        const alreadyListed = p.debts.find(d => d.debtId === sp.debtId || d.name === sp.debtName);
+        if (!alreadyListed && sp.total > 0) {
+          p.debts.push({
+            name: sp.debtName,
+            debtId: sp.debtId,
+            amount: sp.total,
+            dueDate: null,
+            frequency: 'snowball',
+            paidEarly: false,
+            autoPay: false,
+            snowballOnly: true
+          });
+        } else if (alreadyListed) {
+          // Update amount to include snowball extra
+          alreadyListed.amount = sp.total;
+        }
+      }
+    }
   }
 
   // Aggregates
@@ -105,9 +127,34 @@ router.get('/', (req, res) => {
     },
     debtBreakdown,
     expensesByCategory, spendingTrend, debtProgress,
-    recentExpenses: recentExpenses.slice(0, 10)
+    recentExpenses: recentExpenses.slice(0, 10),
+    upcomingBills: getUpcomingBills(bills, 5)
   });
 });
+
+function getUpcomingBills(bills, daysAhead) {
+  const today = new Date();
+  const upcoming = [];
+  for (const bill of bills) {
+    if (bill.frequency !== 'monthly') continue;
+    const thisMonth = new Date(today.getFullYear(), today.getMonth(), bill.due_day);
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, bill.due_day);
+    for (const dueDate of [thisMonth, nextMonth]) {
+      const diff = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (diff >= 0 && diff <= daysAhead) {
+        upcoming.push({
+          name: bill.name,
+          amount: bill.amount,
+          dueDate: dueDate.toISOString().split('T')[0],
+          daysUntil: diff,
+          autoPay: bill.auto_pay ? true : false,
+          isVariable: bill.is_variable ? true : false
+        });
+      }
+    }
+  }
+  return upcoming.sort((a, b) => a.daysUntil - b.daysUntil);
+}
 
 // ── Period Detail ───────────────────────────────────────────────────
 router.get('/period/:payDate', (req, res) => {
@@ -116,16 +163,23 @@ router.get('/period/:payDate', (req, res) => {
   const config = db.prepare('SELECT * FROM paycheck_config ORDER BY created_at DESC LIMIT 1').get();
   if (!config) return res.status(400).json({ error: 'Paycheck not configured' });
 
-  const bills = db.prepare('SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM recurring_bills b LEFT JOIN categories c ON b.category_id = c.id WHERE b.is_active = 1').all();
+  const bills = getBillsWithSubscriptions();
   const debts = db.prepare('SELECT * FROM debts WHERE is_active = 1').all();
 
-  const { balancedPeriods: balanced, snowball } = runFullSnowball(config, bills, debts, 26);
+  const { balancedPeriods: balanced, snowball } = runFullSnowball(config, bills, debts, 26, 6);
   const payDates = balanced.map(p => p.payDate);
   const idx = payDates.indexOf(payDate);
   if (idx === -1) return res.status(404).json({ error: 'Pay date not found in schedule' });
 
   const period = balanced[idx];
-  const periodSnowball = snowball.periodAllocations[idx] || null;
+  const periodSnowball = snowball.periodAllocations.find(sa => sa.payDate === payDate) || null;
+
+  console.log(`Period detail ${payDate}: idx=${idx}, snowball found=${!!periodSnowball}, snowball payments=${periodSnowball?.snowballPayments?.length || 0}, period.debts=${period.debts.length}`);
+  if (periodSnowball?.snowballPayments) {
+    for (const sp of periodSnowball.snowballPayments) {
+      console.log(`  Snowball payment: ${sp.debtName} min=${sp.minimum} extra=${sp.extra} total=${sp.total}`);
+    }
+  }
 
   const periodExpenses = db.prepare(
     'SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM expenses e LEFT JOIN categories c ON e.category_id = c.id WHERE e.date >= ? AND e.date < ? ORDER BY e.date DESC'
@@ -148,6 +202,8 @@ router.get('/period/:payDate', (req, res) => {
     const src = bills.find(o => o.name === b.name || (b.name.startsWith(o.name) && b.frequency === 'weekly'));
     return { ...b, category_name: src?.category_name || null, category_icon: src?.category_icon || null, category_color: src?.category_color || null };
   });
+
+  // Start with debts from the balancer
   const enrichedDebts = period.debts.map(d => {
     const src = debts.find(o => o.name === d.name);
     const se = periodSnowball?.snowballPayments.find(s => s.debtId === d.debtId);
@@ -155,10 +211,41 @@ router.get('/period/:payDate', (req, res) => {
       ...d, minimum_payment: d.amount,
       remaining_amount: d.remaining || src?.remaining_amount || 0,
       interest_rate: d.interestRate || src?.interest_rate || 0,
-      snowballExtra: se?.extra || 0, snowballTotal: se?.total || d.amount,
-      remainingAfterSnowball: se?.remainingAfter ?? (d.remaining || src?.remaining_amount || 0)
+      snowballExtra: se?.extra ?? 0, snowballTotal: se?.total ?? d.amount,
+      remainingAfterSnowball: se?.remainingAfter ?? (d.remaining || src?.remaining_amount || 0),
+      paymentUrl: d.paymentUrl || src?.payment_url || null
     };
   });
+
+  // Add any debts that have snowball payments but aren't in the balancer's allocation
+  // (e.g. snowball extra targeting a debt with no minimum due this period)
+  if (periodSnowball?.snowballPayments) {
+    for (const sp of periodSnowball.snowballPayments) {
+      const alreadyListed = enrichedDebts.find(d => d.debtId === sp.debtId || d.name === sp.debtName);
+      if (!alreadyListed && sp.total > 0) {
+        const src = debts.find(o => o.id === sp.debtId || o.name === sp.debtName);
+        enrichedDebts.push({
+          id: src?.id || sp.debtId,
+          debtId: sp.debtId,
+          name: sp.debtName,
+          amount: 0,
+          minimum_payment: 0,
+          dueDate: null,
+          frequency: 'snowball',
+          paidEarly: false,
+          autoPay: false,
+          isVariable: false,
+          remaining_amount: src?.remaining_amount || 0,
+          interest_rate: src?.interest_rate || 0,
+          snowballExtra: sp.extra,
+          snowballTotal: sp.total,
+          remainingAfterSnowball: sp.remainingAfter,
+          paymentUrl: src?.payment_url || null,
+          snowballOnly: true
+        });
+      }
+    }
+  }
 
   res.json({
     payDate: period.periodStart, periodEnd: period.periodEnd,

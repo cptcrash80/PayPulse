@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api.service';
+import { ToastService } from '../../services/toast.service';
 import { Debt } from '../../models/models';
 
 @Component({
@@ -44,7 +45,7 @@ import { Debt } from '../../models/models';
       <div *ngFor="let debt of debts" class="debt-card">
         <div class="debt-header">
           <div>
-            <h4>{{ debt.name }}</h4>
+            <h4>{{ debt.name }} <span *ngIf="debt.auto_pay" class="tag" style="background: var(--info-dim); color: var(--info); font-size: 0.7rem; font-weight: 600;">Auto-pay</span></h4>
             <div class="debt-meta text-muted">
               {{ debt.interest_rate }}% APR
               <span *ngIf="debt.due_day"> · Due {{ getOrdinal(debt.due_day) }}</span>
@@ -137,6 +138,26 @@ import { Debt } from '../../models/models';
             <input type="number" [(ngModel)]="form.priority" min="0">
           </div>
         </div>
+
+        <div class="form-group" style="margin-top: 4px;">
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; letter-spacing: normal; font-size: 0.9rem;">
+            <input type="checkbox" [(ngModel)]="form.auto_pay" style="width: auto; cursor: pointer;">
+            Auto-pay enabled
+          </label>
+          <small style="color: var(--text-muted); font-size: 0.78rem; margin-top: 4px; display: block;">
+            Auto-pay debts are locked to their due date and cannot be paid early by the balancer
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>Payment URL (optional)</label>
+          <input type="url" [(ngModel)]="form.payment_url" placeholder="https://...">
+        </div>
+
+        <div *ngIf="error" style="background: var(--danger-dim); color: var(--danger); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; margin-top: 8px;">
+          {{ error }}
+        </div>
+
         <div class="modal-actions">
           <button class="btn-secondary" (click)="closeModals()">Cancel</button>
           <button class="btn-primary" (click)="saveDebt()">{{ editing ? 'Update' : 'Add' }}</button>
@@ -241,14 +262,15 @@ export class DebtsComponent implements OnInit {
   showPaymentModal = false;
   editing: Debt | null = null;
   paymentDebt: Debt | null = null;
-  form: any = { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0 };
+  error = '';
+  form: any = { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false, payment_url: '' };
   paymentForm: any = { amount: 0, date: new Date().toISOString().split('T')[0], notes: '' };
 
   get totalRemaining() { return this.debts.reduce((s, d) => s + d.remaining_amount, 0); }
   get totalMinPayments() { return this.debts.reduce((s, d) => s + d.minimum_payment, 0); }
   get totalPaid() { return this.debts.reduce((s, d) => s + (d.total_amount - d.remaining_amount), 0); }
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private toast: ToastService) {}
 
   ngOnInit() { this.load(); }
 
@@ -256,8 +278,9 @@ export class DebtsComponent implements OnInit {
 
   openModal(debt?: Debt) {
     this.editing = debt || null;
-    this.form = debt ? { ...debt } : { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0 };
+    this.form = debt ? { ...debt, auto_pay: !!debt.auto_pay, payment_url: debt.payment_url || '' } : { name: '', total_amount: 0, remaining_amount: 0, minimum_payment: 0, interest_rate: 0, due_day: null, priority: 0, auto_pay: false, payment_url: '' };
     this.showModal = true;
+    this.error = '';
   }
 
   openPayment(debt: Debt) {
@@ -273,23 +296,46 @@ export class DebtsComponent implements OnInit {
 
   saveDebt() {
     if (!this.form.name) return;
-    const obs = this.editing
-      ? this.api.updateDebt(this.editing.id, { ...this.form, is_active: 1 })
-      : this.api.createDebt(this.form);
-    obs.subscribe(() => { this.load(); this.closeModals(); });
+    this.error = '';
+    const payload = {
+      name: this.form.name,
+      total_amount: this.form.total_amount || 0,
+      remaining_amount: this.form.remaining_amount ?? this.form.total_amount ?? 0,
+      minimum_payment: this.form.minimum_payment || 0,
+      interest_rate: this.form.interest_rate || 0,
+      due_day: this.form.due_day || null,
+      priority: this.form.priority || 0,
+      is_active: 1,
+      auto_pay: this.form.auto_pay ? 1 : 0,
+      payment_url: this.form.payment_url || null
+    };
+    const isEdit = !!this.editing;
+    const obs = isEdit
+      ? this.api.updateDebt(this.editing!.id, payload)
+      : this.api.createDebt(payload);
+    obs.subscribe({
+      next: () => { this.load(); this.closeModals(); this.toast.success(isEdit ? 'Debt updated' : 'Debt added'); },
+      error: (err) => {
+        this.error = err.error?.error || err.message || 'Save failed';
+        this.toast.error('Failed to save debt');
+      }
+    });
   }
 
   deleteDebt(debt: Debt) {
     if (confirm(`Delete "${debt.name}"?`)) {
-      this.api.deleteDebt(debt.id).subscribe(() => this.load());
+      this.api.deleteDebt(debt.id).subscribe({
+        next: () => { this.load(); this.toast.success('Debt deleted'); },
+        error: () => this.toast.error('Failed to delete debt')
+      });
     }
   }
 
   recordPayment() {
     if (!this.paymentDebt || !this.paymentForm.amount) return;
-    this.api.addDebtPayment(this.paymentDebt.id, this.paymentForm).subscribe(() => {
-      this.load();
-      this.closeModals();
+    this.api.addDebtPayment(this.paymentDebt.id, this.paymentForm).subscribe({
+      next: () => { this.load(); this.closeModals(); this.toast.success('Payment recorded'); },
+      error: () => this.toast.error('Failed to record payment')
     });
   }
 
