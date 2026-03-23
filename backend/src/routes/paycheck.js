@@ -9,13 +9,9 @@ router.get('/', (req, res) => {
     const config = db.prepare('SELECT * FROM paycheck_config ORDER BY created_at DESC LIMIT 1').get();
     if (!config) return res.json(null);
 
-    const payDates = [];
-    const start = new Date(config.start_date);
-    const today = new Date().toISOString().split('T')[0];
-    let current = new Date(start);
-    while (current.toISOString().split('T')[0] < today) current.setDate(current.getDate() + 14);
-    let d = new Date(current);
-    for (let i = 0; i < 26; i++) { payDates.push(d.toISOString().split('T')[0]); d = new Date(d); d.setDate(d.getDate() + 14); }
+    // Use engine's calculatePayDates with past periods
+    const { calculatePayDates } = require('../engine');
+    const payDates = calculatePayDates(config.start_date, 26, 6);
 
     res.json({ ...config, payDates });
   } catch (err) {
