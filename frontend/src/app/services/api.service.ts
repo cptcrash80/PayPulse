@@ -96,4 +96,52 @@ export class ApiService {
   getYearReview(year: number): Observable<any> {
     return this.http.get(`${this.base}/review?year=${year}`);
   }
+
+  // Subscriptions
+  getSubscriptions(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.base}/subscriptions`);
+  }
+  createSubscription(data: any): Observable<any> {
+    return this.http.post(`${this.base}/subscriptions`, data);
+  }
+  updateSubscription(id: string, data: any): Observable<any> {
+    return this.http.put(`${this.base}/subscriptions/${id}`, data);
+  }
+  deleteSubscription(id: string): Observable<any> {
+    return this.http.delete(`${this.base}/subscriptions/${id}`);
+  }
+
+  // Period paid tracking
+  getPaidItems(payDate: string): Observable<Record<string, boolean>> {
+    return this.http.get<Record<string, boolean>>(`${this.base}/paid/${payDate}`);
+  }
+  togglePaidItem(payDate: string, itemId: string, itemType: string): Observable<Record<string, boolean>> {
+    return this.http.post<Record<string, boolean>>(`${this.base}/paid/${payDate}`, { item_id: itemId, item_type: itemType });
+  }
+
+  // Period amount overrides (variable bills)
+  getAmountOverrides(payDate: string): Observable<Record<string, number>> {
+    return this.http.get<Record<string, number>>(`${this.base}/paid/${payDate}/overrides`);
+  }
+  setAmountOverride(payDate: string, itemId: string, itemType: string, amount: number): Observable<Record<string, number>> {
+    return this.http.post<Record<string, number>>(`${this.base}/paid/${payDate}/overrides`, { item_id: itemId, item_type: itemType, amount });
+  }
+
+  // Snowball overrides (skip/adjust per period)
+  getSnowballOverride(payDate: string): Observable<any> {
+    return this.http.get(`${this.base}/paid/${payDate}/snowball`);
+  }
+  setSnowballOverride(payDate: string, maxExtra: number | null, notes?: string): Observable<any> {
+    return this.http.post(`${this.base}/paid/${payDate}/snowball`, { max_extra: maxExtra, notes });
+  }
+
+  // Simulator
+  runSimulation(params: any): Observable<any> {
+    return this.http.post(`${this.base}/simulator`, params);
+  }
+
+  // Progress / Net Worth
+  getProgress(): Observable<any> {
+    return this.http.get(`${this.base}/progress`);
+  }
 }

@@ -11,18 +11,34 @@ function getMonthsInRange(start, end) {
   return months;
 }
 
-function calculatePayDates(startDate, count) {
-  const dates = [], start = new Date(startDate), now = new Date();
+function calculatePayDates(startDate, count, pastCount) {
+  pastCount = pastCount || 0;
+  const dates = [], start = new Date(startDate);
+  const today = new Date().toISOString().split('T')[0];
   let current = new Date(start);
-  while (current <= now) current.setDate(current.getDate() + 14);
-  let d = new Date(current);
-  for (let i = 0; i < count; i++) { dates.push(d.toISOString().split('T')[0]); d = new Date(d); d.setDate(d.getDate() + 14); }
+  // Advance until current is on or after today
+  while (current.toISOString().split('T')[0] < today) current.setDate(current.getDate() + 14);
+  // Walk backwards for past periods
+  let pastStart = new Date(current);
+  for (let i = 0; i < pastCount; i++) {
+    pastStart.setDate(pastStart.getDate() - 14);
+  }
+  let d = new Date(pastStart);
+  for (let i = 0; i < count + pastCount; i++) { dates.push(d.toISOString().split('T')[0]); d = new Date(d); d.setDate(d.getDate() + 14); }
   return dates;
 }
 
 function getCurrentPayPeriod(payDates) {
   if (payDates.length < 2) return { start: payDates[0], end: payDates[0] };
-  return { start: payDates[0], end: payDates[1] };
+  const today = new Date().toISOString().split('T')[0];
+  // Find the period where today falls between payDate[i] and payDate[i+1]
+  for (let i = 0; i < payDates.length - 1; i++) {
+    if (today >= payDates[i] && today < payDates[i + 1]) {
+      return { start: payDates[i], end: payDates[i + 1] };
+    }
+  }
+  // Fallback: if today is on/after the last date, use the last date
+  return { start: payDates[payDates.length - 1], end: payDates[payDates.length - 1] };
 }
 
 function buildPeriodShells(payDates, config) {
@@ -54,12 +70,13 @@ function generateObligations(bills, debts, periods) {
       for (let pi = 0; pi < periods.length; pi++)
         items.push({ name: bill.name + ' (x2)', amount: bill.amount * 2, type: 'bill', frequency: 'weekly', dueDate: periods[pi].payDate, deadlinePeriodIdx: pi, earliestPeriodIdx: pi, moveable: false, data: bill });
     } else if (bill.frequency === 'monthly') {
+      const isAutoPay = bill.auto_pay ? true : false;
       for (let pi = 0; pi < periods.length; pi++) {
         const pStart = new Date(periods[pi].periodStart), pEnd = new Date(periods[pi].periodEnd);
         for (const { year, month } of getMonthsInRange(pStart, pEnd)) {
           const dueDate = new Date(year, month, bill.due_day);
           if (dueDate >= pStart && dueDate < pEnd)
-            items.push({ name: bill.name, amount: bill.amount, type: 'bill', frequency: 'monthly', dueDate: dueDate.toISOString().split('T')[0], deadlinePeriodIdx: pi, earliestPeriodIdx: Math.max(0, pi - 1), moveable: true, data: bill });
+            items.push({ name: bill.name, amount: bill.amount, type: 'bill', frequency: 'monthly', dueDate: dueDate.toISOString().split('T')[0], deadlinePeriodIdx: pi, earliestPeriodIdx: isAutoPay ? pi : Math.max(0, pi - 1), moveable: !isAutoPay, autoPay: isAutoPay, data: bill });
         }
       }
     }
@@ -67,12 +84,13 @@ function generateObligations(bills, debts, periods) {
   for (const debt of debts) {
     if (debt.minimum_payment <= 0) continue;
     if (debt.due_day) {
+      const isAutoPay = debt.auto_pay ? true : false;
       for (let pi = 0; pi < periods.length; pi++) {
         const pStart = new Date(periods[pi].periodStart), pEnd = new Date(periods[pi].periodEnd);
         for (const { year, month } of getMonthsInRange(pStart, pEnd)) {
           const dueDate = new Date(year, month, debt.due_day);
           if (dueDate >= pStart && dueDate < pEnd)
-            items.push({ name: debt.name, amount: debt.minimum_payment, type: 'debt', frequency: 'monthly', dueDate: dueDate.toISOString().split('T')[0], deadlinePeriodIdx: pi, earliestPeriodIdx: Math.max(0, pi - 1), moveable: true, debtId: debt.id, remaining: debt.remaining_amount, interestRate: debt.interest_rate, data: debt });
+            items.push({ name: debt.name, amount: debt.minimum_payment, type: 'debt', frequency: 'monthly', dueDate: dueDate.toISOString().split('T')[0], deadlinePeriodIdx: pi, earliestPeriodIdx: isAutoPay ? pi : Math.max(0, pi - 1), moveable: !isAutoPay, autoPay: isAutoPay, debtId: debt.id, remaining: debt.remaining_amount, interestRate: debt.interest_rate, data: debt });
         }
       }
     } else {
@@ -113,7 +131,7 @@ function balanceAllocations(items, periods, config) {
   for (const p of periods) { p.bills = []; p.debts = []; p.totalBills = 0; p.totalDebtMins = 0; }
   for (const a of assignments) {
     const p = periods[a.assignedPeriodIdx];
-    const entry = { name: a.name, amount: a.amount, dueDate: a.dueDate, frequency: a.frequency, paidEarly: a.assignedPeriodIdx < a.deadlinePeriodIdx };
+    const entry = { id: a.data?.id || null, name: a.name, amount: a.amount, dueDate: a.dueDate, frequency: a.frequency, paidEarly: a.assignedPeriodIdx < a.deadlinePeriodIdx, autoPay: a.autoPay || false, paymentUrl: a.data?.payment_url || null, isVariable: a.data?.is_variable ? true : false };
     if (a.type === 'bill') { p.bills.push(entry); p.totalBills += a.amount; }
     else { p.debts.push({ ...entry, remaining: a.remaining, interestRate: a.interestRate, debtId: a.debtId }); p.totalDebtMins += a.amount; }
   }
@@ -126,6 +144,17 @@ function balanceAllocations(items, periods, config) {
 // ════════════════════════════════════════════════════════════════════
 
 function computeSnowball(periods, debts, config) {
+  const db = getDb();
+
+  // Load all snowball overrides into a map
+  const snowballOverrides = {};
+  try {
+    const rows = db.prepare('SELECT * FROM period_snowball_overrides').all();
+    for (const r of rows) snowballOverrides[r.pay_date] = r;
+  } catch (e) {
+    // Table might not exist yet on first run
+  }
+
   const debtStates = debts
     .filter(d => d.is_active && d.remaining_amount > 0)
     .map(d => ({ id: d.id, name: d.name, originalBalance: d.remaining_amount, remaining: d.remaining_amount, minimumPayment: d.minimum_payment, interestRate: d.interest_rate, paidOff: false, payoffPeriod: null, payoffDate: null }))
@@ -134,8 +163,19 @@ function computeSnowball(periods, debts, config) {
   const periodAllocations = [];
   const paidOffIds = new Set();
 
+  // Find the current period index — snowball extra only applies from here onward
+  const today = new Date().toISOString().split('T')[0];
+  let currentPeriodIdx = 0;
+  for (let i = 0; i < periods.length; i++) {
+    if (periods[i].payDate <= today && (i === periods.length - 1 || periods[i + 1].payDate > today)) {
+      currentPeriodIdx = i;
+      break;
+    }
+  }
+
   for (let pi = 0; pi < periods.length; pi++) {
     const period = periods[pi];
+    const isPastPeriod = pi < currentPeriodIdx;
     let freeCash = config.amount - period.totalBills - period.transfer;
     let activeMinimums = 0;
     for (const pd of period.debts) {
@@ -146,7 +186,22 @@ function computeSnowball(periods, debts, config) {
 
     const minSpending = config.minimum_spending || 0;
     const payments = [];
-    let extraPool = round2(Math.max(0, freeCash - minSpending));
+    // No snowball extra for past periods — those are historical
+    let extraPool = isPastPeriod ? 0 : round2(Math.max(0, freeCash - minSpending));
+
+    // Apply snowball override for this period
+    const override = snowballOverrides[period.payDate];
+    let snowballSkipped = false;
+    let snowballCapped = false;
+    if (override && override.max_extra !== null && override.max_extra !== undefined) {
+      if (override.max_extra === 0) {
+        extraPool = 0;
+        snowballSkipped = true;
+      } else {
+        extraPool = round2(Math.min(extraPool, override.max_extra));
+        snowballCapped = true;
+      }
+    }
 
     for (const ds of debtStates) {
       if (ds.paidOff) continue;
@@ -179,7 +234,11 @@ function computeSnowball(periods, debts, config) {
       payDate: period.payDate, snowballPayments: payments, totalSnowball, snowballExtra,
       freeCash, minimumSpending: minSpending,
       remainingAfterSnowball: round2(config.amount - period.totalBills - period.transfer - totalSnowball),
-      snowballTarget: debtStates.find(d => !d.paidOff)?.name || null
+      snowballTarget: debtStates.find(d => !d.paidOff)?.name || null,
+      snowballSkipped,
+      snowballCapped,
+      snowballOverride: override ? override.max_extra : null,
+      snowballOverrideNotes: override?.notes || null
     });
   }
 
@@ -309,8 +368,8 @@ function projectSnowballPayoff(balancedPeriods, debts, config) {
 /**
  * Run balance + short-term snowball over periodCount periods.
  */
-function runFullSnowball(config, bills, debts, periodCount) {
-  const payDates = calculatePayDates(config.start_date, periodCount);
+function runFullSnowball(config, bills, debts, periodCount, pastCount) {
+  const payDates = calculatePayDates(config.start_date, periodCount, pastCount || 0);
   const shells = buildPeriodShells(payDates, config);
   const obligations = generateObligations(bills, debts, shells);
   const balanced = balanceAllocations(obligations, shells, config);
@@ -327,8 +386,28 @@ function runFullSnowball(config, bills, debts, periodCount) {
   return { balancedPeriods: balanced, snowball };
 }
 
+/**
+ * Fetch active bills + active subscriptions merged into one array.
+ * Subscriptions are treated as auto_pay bills.
+ */
+function getBillsWithSubscriptions() {
+  const db = getDb();
+  const bills = db.prepare('SELECT * FROM recurring_bills WHERE is_active = 1').all();
+  const subs = db.prepare('SELECT * FROM subscriptions WHERE is_active = 1').all();
+  const merged = [
+    ...bills,
+    ...subs.map(s => ({
+      ...s,
+      auto_pay: 1,
+      _isSub: true
+    }))
+  ];
+  return merged;
+}
+
 module.exports = {
   round2, getMonthsInRange, calculatePayDates, getCurrentPayPeriod,
   buildPeriodShells, generateObligations, balanceAllocations,
-  computeSnowball, runFullSnowball, projectSnowballPayoff
+  computeSnowball, runFullSnowball, projectSnowballPayoff,
+  getBillsWithSubscriptions
 };

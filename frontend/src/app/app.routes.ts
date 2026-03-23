@@ -8,7 +8,10 @@ export const routes: Routes = [
   { path: 'bills', loadComponent: () => import('./components/bills/bills.component').then(m => m.BillsComponent) },
   { path: 'expenses', loadComponent: () => import('./components/expenses/expenses.component').then(m => m.ExpensesComponent) },
   { path: 'debts', loadComponent: () => import('./components/debts/debts.component').then(m => m.DebtsComponent) },
+  { path: 'subscriptions', loadComponent: () => import('./components/subscriptions/subscriptions.component').then(m => m.SubscriptionsComponent) },
   { path: 'categories', loadComponent: () => import('./components/categories/categories.component').then(m => m.CategoriesComponent) },
   { path: 'review', loadComponent: () => import('./components/year-review/year-review.component').then(m => m.YearReviewComponent) },
+  { path: 'simulator', loadComponent: () => import('./components/simulator/simulator.component').then(m => m.SimulatorComponent) },
+  { path: 'progress', loadComponent: () => import('./components/progress/progress.component').then(m => m.ProgressComponent) },
   { path: '**', redirectTo: 'dashboard' }
 ];

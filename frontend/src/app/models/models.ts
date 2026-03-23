@@ -28,6 +28,8 @@ export interface RecurringBill {
   due_day: number;
   frequency: string;
   is_active: number;
+  auto_pay: number;
+  payment_url: string | null;
 }
 
 export interface Expense {
@@ -60,6 +62,8 @@ export interface Debt {
   due_day: number | null;
   priority: number;
   is_active: number;
+  auto_pay: number;
+  payment_url: string | null;
   payments: DebtPayment[];
   snowballEstimate: {
     payoffPeriod: string | null;
