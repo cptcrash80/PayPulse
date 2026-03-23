@@ -13,18 +13,29 @@ function getMonthsInRange(start, end) {
 
 function calculatePayDates(startDate, count, pastCount) {
   pastCount = pastCount || 0;
-  const dates = [], start = new Date(startDate);
   const today = new Date().toISOString().split('T')[0];
-  let current = new Date(start);
-  // Advance until current is on or after today
-  while (current.toISOString().split('T')[0] < today) current.setDate(current.getDate() + 14);
-  // Walk backwards for past periods
-  let pastStart = new Date(current);
-  for (let i = 0; i < pastCount; i++) {
-    pastStart.setDate(pastStart.getDate() - 14);
+
+  // Pure UTC date arithmetic — avoids local-timezone drift when using setDate/getDate
+  function addDays(dateStr, n) {
+    const d = new Date(dateStr + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().split('T')[0];
   }
-  let d = new Date(pastStart);
-  for (let i = 0; i < count + pastCount; i++) { dates.push(d.toISOString().split('T')[0]); d = new Date(d); d.setDate(d.getDate() + 14); }
+
+  // Advance to the current period start: the last pay date on or before today.
+  // Stop when the NEXT step would land after today (i.e. we're already in the period).
+  let current = startDate;
+  if (current <= today) {
+    while (addDays(current, 14) <= today) current = addDays(current, 14);
+  }
+
+  // Walk backwards to include past periods
+  let start = current;
+  for (let i = 0; i < pastCount; i++) start = addDays(start, -14);
+
+  const dates = [];
+  let d = start;
+  for (let i = 0; i < count + pastCount; i++) { dates.push(d); d = addDays(d, 14); }
   return dates;
 }
 
