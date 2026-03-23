@@ -17,8 +17,8 @@ router.get('/', (req, res) => {
     'SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM expenses e LEFT JOIN categories c ON e.category_id = c.id WHERE e.date >= ? ORDER BY e.date DESC'
   ).all(thirtyDaysAgo.toISOString().split('T')[0]);
 
-  // 4 future periods + 1 past for display
-  const { balancedPeriods, snowball } = runFullSnowball(config, bills, debts, 4, 1);
+  // 26 periods for balancing (matches period detail) — display is sliced to 4 in frontend
+  const { balancedPeriods, snowball } = runFullSnowball(config, bills, debts, 26);
 
   // Long-term projection for payoff dates (uses avg free cash, not individual periods)
   const longSnowball = projectSnowballPayoff(balancedPeriods, debts, config);
