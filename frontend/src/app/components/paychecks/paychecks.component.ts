@@ -182,6 +182,9 @@ export class PaychecksComponent implements OnInit {
   }
 
   isNext(date: string): boolean {
-    return !!this.config?.payDates && date === this.config.payDates[0];
+    if (!this.config?.payDates) return false;
+    const today = new Date().toISOString().split('T')[0];
+    const nextDate = this.config.payDates.find((d: string) => d > today);
+    return date === nextDate;
   }
 }
