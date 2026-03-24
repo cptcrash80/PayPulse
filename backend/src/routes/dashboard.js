@@ -38,6 +38,9 @@ router.get('/', (req, res) => {
 
     // Add snowball-only debts (debts receiving extra but not allocated a minimum this period)
     if (sa?.snowballPayments) {
+      // Remove debts that the balancer scheduled but the snowball engine skipped (already paid off)
+      p.debts = p.debts.filter(d => sa.snowballPayments.some(sp => sp.debtId === d.debtId || sp.debtName === d.name));
+
       for (const sp of sa.snowballPayments) {
         const alreadyListed = p.debts.find(d => d.debtId === sp.debtId || d.name === sp.debtName);
         if (!alreadyListed && sp.total > 0) {
@@ -203,8 +206,13 @@ router.get('/period/:payDate', (req, res) => {
     return { ...b, category_name: src?.category_name || null, category_icon: src?.category_icon || null, category_color: src?.category_color || null };
   });
 
-  // Start with debts from the balancer
-  const enrichedDebts = period.debts.map(d => {
+  // Start with debts from the balancer, excluding any the snowball engine already paid off
+  // (balancer schedules minimums beyond payoff; snowball engine knows better)
+  const activeBalancerDebts = periodSnowball
+    ? period.debts.filter(d => periodSnowball.snowballPayments.some(s => s.debtId === d.debtId || s.debtName === d.name))
+    : period.debts;
+
+  const enrichedDebts = activeBalancerDebts.map(d => {
     const src = debts.find(o => o.name === d.name);
     const se = periodSnowball?.snowballPayments.find(s => s.debtId === d.debtId);
     return {
