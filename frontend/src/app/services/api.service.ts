@@ -126,6 +126,9 @@ export class ApiService {
   setAmountOverride(payDate: string, itemId: string, itemType: string, amount: number): Observable<Record<string, number>> {
     return this.http.post<Record<string, number>>(`${this.base}/paid/${payDate}/overrides`, { item_id: itemId, item_type: itemType, amount });
   }
+  clearAmountOverride(payDate: string, itemId: string, itemType: string): Observable<Record<string, number>> {
+    return this.http.delete<Record<string, number>>(`${this.base}/paid/${payDate}/overrides/${itemType}/${itemId}`);
+  }
 
   // Snowball overrides (skip/adjust per period)
   getSnowballOverride(payDate: string): Observable<any> {

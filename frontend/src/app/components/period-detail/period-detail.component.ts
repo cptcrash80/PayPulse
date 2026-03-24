@@ -184,18 +184,37 @@ import { ToastService } from '../../services/toast.service';
                 {{ debt.name }}
                 <span *ngIf="debt.paidEarly" class="early-badge">Paid Early</span>
                 <span *ngIf="debt.snowballOnly" class="early-badge" style="background: var(--accent-dim); color: var(--accent);">Snowball</span>
+                <span *ngIf="debt.hasAmountOverride" class="early-badge" style="background: var(--warning-dim); color: var(--warning);">Custom</span>
               </div>
               <div class="detail-meta text-muted">
                 <span *ngIf="debt.dueDate">Due {{ debt.dueDate | date:'MMM d' }} · </span>
-                <span *ngIf="debt.minimum_payment > 0">Min {{ debt.minimum_payment | currency }}</span>
-                <span *ngIf="debt.snowballExtra > 0"> + {{ debt.snowballExtra | currency }} extra</span>
-                <span *ngIf="debt.remainingAfterSnowball !== undefined"> · {{ debt.remainingAfterSnowball | currency }} after</span>
+                <span *ngIf="!debt.hasAmountOverride && debt.minimum_payment > 0">Min {{ debt.minimum_payment | currency }}</span>
+                <span *ngIf="!debt.hasAmountOverride && debt.snowballExtra > 0"> + {{ debt.snowballExtra | currency }} extra</span>
+                <span *ngIf="debt.hasAmountOverride" class="text-warning">Overridden · </span>
+                <span *ngIf="debt.remainingAfterSnowball !== undefined"> {{ debt.remainingAfterSnowball | currency }} after</span>
               </div>
             </div>
           </div>
           <div class="detail-right">
             <a *ngIf="debt.paymentUrl" [href]="debt.paymentUrl" target="_blank" rel="noopener" class="pay-link">Pay →</a>
-            <span class="money" [class.text-accent]="debt.snowballExtra > 0" [class.text-danger]="!debt.snowballExtra">{{ (debt.snowballTotal != null ? debt.snowballTotal : debt.minimum_payment) | currency }}</span>
+            <ng-container *ngIf="editingDebtId === (debt.debtId || debt.id || debt.name); else debtAmountDisplay">
+              <input type="number" class="amount-input" [(ngModel)]="editingDebtAmount"
+                     (keydown.enter)="saveDebtOverride(debt)"
+                     (keydown.escape)="editingDebtId = null"
+                     step="0.01" min="0" autofocus>
+              <button class="edit-btn" (click)="saveDebtOverride(debt)" title="Save">✓</button>
+              <button class="edit-btn" (click)="editingDebtId = null" title="Cancel">✕</button>
+            </ng-container>
+            <ng-template #debtAmountDisplay>
+              <span class="money"
+                    [class.text-accent]="debt.snowballExtra > 0 && !debt.hasAmountOverride"
+                    [class.text-danger]="!debt.snowballExtra && !debt.hasAmountOverride"
+                    [class.text-warning]="debt.hasAmountOverride">
+                {{ getDebtDisplayAmount(debt) | currency }}
+              </span>
+              <button *ngIf="debt.hasAmountOverride" class="edit-btn text-muted" (click)="clearDebtOverride(debt)" title="Reset to calculated amount">✕</button>
+              <button class="edit-btn" (click)="startEditingDebt(debt)" title="Override payment amount">✎</button>
+            </ng-template>
           </div>
         </div>
         <div *ngIf="data.debts.length > 0" class="detail-total">
@@ -437,6 +456,18 @@ import { ToastService } from '../../services/toast.service';
       letter-spacing: 0.06em;
       margin-bottom: 8px;
     }
+    .edit-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.85rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .edit-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
     .snowball-card { }
     .snowball-controls {
       background: var(--bg-tertiary);
@@ -510,6 +541,8 @@ export class PeriodDetailComponent implements OnInit {
   snowballOverrideMode: 'normal' | 'skip' | 'custom' = 'normal';
   snowballOverrideActive = false;
   customSnowballAmount = 0;
+  editingDebtId: string | null = null;
+  editingDebtAmount = 0;
 
   constructor(
     private route: ActivatedRoute,
@@ -600,6 +633,38 @@ export class PeriodDetailComponent implements OnInit {
     if (isNaN(amount) || amount < 0 || !this.data?.payDate) return;
     this.api.setAmountOverride(this.data.payDate, item.id || item.name, itemType, amount)
       .subscribe(o => this.overrides = o);
+  }
+
+  getDebtDisplayAmount(debt: any): number {
+    const key = `debt:${debt.debtId || debt.id || debt.name}`;
+    if (this.overrides[key] !== undefined) return this.overrides[key];
+    return debt.snowballTotal != null ? debt.snowballTotal : debt.minimum_payment;
+  }
+
+  hasDebtOverride(debt: any): boolean {
+    const key = `debt:${debt.debtId || debt.id || debt.name}`;
+    return this.overrides[key] !== undefined;
+  }
+
+  startEditingDebt(debt: any) {
+    this.editingDebtId = debt.debtId || debt.id || debt.name;
+    this.editingDebtAmount = this.getDebtDisplayAmount(debt);
+  }
+
+  saveDebtOverride(debt: any) {
+    const amount = this.editingDebtAmount;
+    this.editingDebtId = null;
+    if (isNaN(amount) || amount < 0 || !this.data?.payDate) return;
+    const itemId = debt.debtId || debt.id || debt.name;
+    this.api.setAmountOverride(this.data.payDate, itemId, 'debt', amount)
+      .subscribe(o => { this.overrides = o; this.reloadData(); });
+  }
+
+  clearDebtOverride(debt: any) {
+    if (!this.data?.payDate) return;
+    const itemId = debt.debtId || debt.id || debt.name;
+    this.api.clearAmountOverride(this.data.payDate, itemId, 'debt')
+      .subscribe(o => { this.overrides = o; this.reloadData(); });
   }
 
   get paidBillsCount(): number {
