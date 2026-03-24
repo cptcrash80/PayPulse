@@ -104,6 +104,24 @@ router.post('/:payDate/overrides', (req, res) => {
   }
 });
 
+// Clear a specific amount override for an item in a period
+router.delete('/:payDate/overrides/:itemType/:itemId', (req, res) => {
+  try {
+    const db = getDb();
+    const { payDate, itemType, itemId } = req.params;
+    db.prepare('DELETE FROM period_amount_overrides WHERE pay_date = ? AND item_id = ? AND item_type = ?').run(payDate, itemId, itemType);
+    const items = db.prepare('SELECT * FROM period_amount_overrides WHERE pay_date = ?').all(payDate);
+    const overrides = {};
+    for (const item of items) {
+      overrides[`${item.item_type}:${item.item_id}`] = item.amount;
+    }
+    res.json(overrides);
+  } catch (err) {
+    console.error('DELETE /api/paid/:payDate/overrides error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get snowball override for a pay period
 router.get('/:payDate/snowball', (req, res) => {
   try {

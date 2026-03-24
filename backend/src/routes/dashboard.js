@@ -208,7 +208,9 @@ router.get('/period/:payDate', (req, res) => {
     const src = debts.find(o => o.name === d.name);
     const se = periodSnowball?.snowballPayments.find(s => s.debtId === d.debtId);
     return {
-      ...d, minimum_payment: d.amount,
+      ...d,
+      id: src?.id || d.debtId,
+      minimum_payment: d.amount,
       remaining_amount: d.remaining || src?.remaining_amount || 0,
       interest_rate: d.interestRate || src?.interest_rate || 0,
       snowballExtra: se?.extra ?? 0, snowballTotal: se?.total ?? d.amount,
@@ -247,6 +249,24 @@ router.get('/period/:payDate', (req, res) => {
     }
   }
 
+  // Apply any per-debt amount overrides for this period
+  const debtOverrideRows = db.prepare(
+    'SELECT * FROM period_amount_overrides WHERE pay_date = ? AND item_type = ?'
+  ).all(payDate, 'debt');
+  for (const override of debtOverrideRows) {
+    const debt = enrichedDebts.find(d => d.id === override.item_id || d.debtId === override.item_id || d.name === override.item_id);
+    if (debt) {
+      debt.snowballTotal = override.amount;
+      debt.hasAmountOverride = true;
+    }
+  }
+
+  // Recompute totals with overrides applied
+  const effectiveTotalSnowball = round2(enrichedDebts.reduce((s, d) => s + (d.snowballTotal ?? d.minimum_payment ?? 0), 0));
+  const effectiveCommitted = round2(totalBills + effectiveTotalSnowball + config.transfer_amount);
+  const effectiveAvailable = round2(config.amount - effectiveCommitted);
+  const effectiveRemaining = round2(effectiveAvailable - totalExpenses);
+
   res.json({
     payDate: period.periodStart, periodEnd: period.periodEnd,
     prevPeriod: idx > 0 ? payDates[idx - 1] : null,
@@ -256,9 +276,9 @@ router.get('/period/:payDate', (req, res) => {
     expenses: periodExpenses, debtPayments: periodDebtPayments, snowball: periodSnowball,
     totals: {
       bills: totalBills, debtMinimums: round2(period.totalDebtMins),
-      snowballExtra, totalSnowball, transfer: config.transfer_amount,
-      committed, expenses: totalExpenses, debtPaymentsMade: totalDebtPaymentsMade,
-      available, remaining, freeCash: periodSnowball?.freeCash || available
+      snowballExtra, totalSnowball: effectiveTotalSnowball, transfer: config.transfer_amount,
+      committed: effectiveCommitted, expenses: totalExpenses, debtPaymentsMade: totalDebtPaymentsMade,
+      available: effectiveAvailable, remaining: effectiveRemaining, freeCash: periodSnowball?.freeCash || effectiveAvailable
     }
   });
 });
