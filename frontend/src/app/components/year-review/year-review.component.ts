@@ -273,12 +273,7 @@ export class YearReviewComponent implements OnInit {
   }
 
   load() {
-    this.api.getYearReview(this.selectedYear).subscribe(d => {
-      this.data = d;
-      if (d.availableYears && !d.availableYears.includes(this.selectedYear)) {
-        this.selectedYear = d.availableYears[d.availableYears.length - 1];
-      }
-    });
+    this.api.getYearReview(this.selectedYear).subscribe(d => this.data = d);
   }
 
   getDebtMinsTotal(): number {

@@ -17,16 +17,20 @@ router.get('/', (req, res) => {
 
   const bills = getBillsWithSubscriptions();
   const debts = db.prepare('SELECT * FROM debts').all();
-  const activeDebts = debts.filter(d => d.is_active);
+  // Exclude paid-off debts (remaining_amount = 0) so they don't appear in future projections
+  const activeDebts = debts.filter(d => d.is_active && d.remaining_amount > 0);
 
-  // Generate pay dates covering the full requested year
-  // We need enough periods to span Jan 1 through Dec 31
   const allPayDates = calculatePayDates(config.start_date, 260);
   const yearStart = `${requestedYear}-01-01`;
   const yearEnd = `${requestedYear}-12-31`;
+  const today = new Date().toISOString().split('T')[0];
 
-  // Filter to pay dates that fall within the requested year
-  const yearPayDates = allPayDates.filter(d => d >= yearStart && d <= yearEnd);
+  // For future years, include a lead-in from today so the snowball projection
+  // correctly carries debt payoff state forward (debts paid off in 2026 won't
+  // reappear in 2027).
+  const projStartDate = today < yearStart ? today : yearStart;
+  const projectionPayDates = allPayDates.filter(d => d >= projStartDate && d <= yearEnd);
+  const yearPayDates = projectionPayDates.filter(d => d >= yearStart);
 
   if (yearPayDates.length === 0) {
     return res.json({
@@ -37,8 +41,8 @@ router.get('/', (req, res) => {
     });
   }
 
-  // Build balanced periods for this year's pay dates
-  const shells = buildPeriodShells(yearPayDates, config);
+  // Build balanced periods for the full projection window (lead-in + year)
+  const shells = buildPeriodShells(projectionPayDates, config);
   const obligations = generateObligations(bills, activeDebts, shells);
   const balanced = balanceAllocations(obligations, shells, config);
 
@@ -47,12 +51,15 @@ router.get('/', (req, res) => {
     p.totalDebtMins = round2(p.totalDebtMins);
   }
 
-  // Run snowball over these periods
+  // Run snowball over the full projection, then slice to the requested year only
   const snowball = computeSnowball(balanced, activeDebts, config);
+  const yearOffset = projectionPayDates.length - yearPayDates.length;
+  const yearBalanced = balanced.slice(yearOffset);
+  const yearSnowball = snowball.periodAllocations.slice(yearOffset);
 
   // Build per-paycheck breakdown, applying amount overrides for variable bills
-  const paycheckBreakdowns = balanced.map((p, i) => {
-    const sa = snowball.periodAllocations[i];
+  const paycheckBreakdowns = yearBalanced.map((p, i) => {
+    const sa = yearSnowball[i];
 
     // Fetch amount overrides for this period
     const overrideRows = db.prepare('SELECT * FROM period_amount_overrides WHERE pay_date = ?').all(p.payDate);
@@ -123,10 +130,10 @@ router.get('/', (req, res) => {
     }
   }
 
-  // Per-debt annual totals — use snowball payments which correctly account for payoff
-  // The snowball stops paying minimums after a debt is paid off, so these totals are accurate
+  // Per-debt annual totals — use year-only snowball payments (payoff state is carried
+  // forward correctly from the lead-in, so paid-off debts won't appear here)
   const debtTotals = {};
-  for (const sa of snowball.periodAllocations) {
+  for (const sa of yearSnowball) {
     for (const sp of sa.snowballPayments) {
       if (!debtTotals[sp.debtName]) {
         debtTotals[sp.debtName] = { name: sp.debtName, minimums: 0, extra: 0, totalPlanned: 0, count: 0 };
@@ -157,11 +164,12 @@ router.get('/', (req, res) => {
     GROUP BY e.category_id ORDER BY total DESC
   `).all(yearStart, yearEnd);
 
-  // Available years (for year selector)
+  // Available years (for year selector) — anchored to config.start_date so the list
+  // is stable regardless of which year is currently being viewed
   const earliestExpense = db.prepare('SELECT MIN(date) as d FROM expenses').get();
   const earliestPayment = db.prepare('SELECT MIN(date) as d FROM debt_payments').get();
-  const earliest = [earliestExpense?.d, earliestPayment?.d, yearStart].filter(Boolean).sort()[0];
-  const startYear = new Date(earliest).getFullYear();
+  const earliest = [earliestExpense?.d, earliestPayment?.d, config.start_date].filter(Boolean).sort()[0];
+  const startYear = parseInt(earliest.substring(0, 4));
   const currentYear = new Date().getFullYear();
   const availableYears = [];
   for (let y = startYear; y <= currentYear + 1; y++) availableYears.push(y);
@@ -199,22 +207,30 @@ router.get('/csv', (req, res) => {
     const allPayDates = calculatePayDates(config.start_date, 260);
     const yearStart = `${requestedYear}-01-01`;
     const yearEnd = `${requestedYear}-12-31`;
-    const yearPayDates = allPayDates.filter(d => d >= yearStart && d <= yearEnd);
+    const today = new Date().toISOString().split('T')[0];
+
+    const projStartDate = today < yearStart ? today : yearStart;
+    const projectionPayDates = allPayDates.filter(d => d >= projStartDate && d <= yearEnd);
+    const yearPayDates = projectionPayDates.filter(d => d >= yearStart);
 
     if (yearPayDates.length === 0) return res.status(404).json({ error: 'No data for year' });
 
     const bills = getBillsWithSubscriptions();
-    const activeDebts = db.prepare('SELECT * FROM debts WHERE is_active = 1').all();
-    const shells = buildPeriodShells(yearPayDates, config);
+    const activeDebts = db.prepare('SELECT * FROM debts WHERE is_active = 1 AND remaining_amount > 0').all();
+    const shells = buildPeriodShells(projectionPayDates, config);
     const obligations = generateObligations(bills, activeDebts, shells);
     const balanced = balanceAllocations(obligations, shells, config);
     for (const p of balanced) { p.totalBills = round2(p.totalBills); p.totalDebtMins = round2(p.totalDebtMins); }
     const snowball = computeSnowball(balanced, activeDebts, config);
 
+    const yearOffset = projectionPayDates.length - yearPayDates.length;
+    const yearBalanced = balanced.slice(yearOffset);
+    const yearSnowballAllocations = snowball.periodAllocations.slice(yearOffset);
+
     const rows = [['Pay Date', 'Income', 'Bills', 'Debt Minimums', 'Snowball Extra', 'Total Debt', 'Transfer', 'Expenses']];
 
-    balanced.forEach((p, i) => {
-      const sa = snowball.periodAllocations[i];
+    yearBalanced.forEach((p, i) => {
+      const sa = yearSnowballAllocations[i];
       const expData = db.prepare('SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date < ?').get(p.periodStart, p.periodEnd);
       rows.push([
         p.payDate,
